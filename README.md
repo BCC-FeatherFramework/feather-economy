@@ -178,3 +178,48 @@ across server restart, settlement type gate 8/8, live treasury purchase credit=2
 exactly once, and undelivered refund restoring 200 with delivery blocked. Latest
 journal audit passed 5/5, pending=0, published=60. Treasury purchase/refund recovery
 across server restart is still pending; no production-readiness claim is implied.
+
+# Operated accounts (proposed extension, off by default)
+
+This extension is a proposal against master plan §5.2 and §13 (bank accounts,
+general treasury spending, payroll and Society management are deferred there).
+With the shipped configuration every new access list is empty or holds only
+`feather-economy`, `BankSupply` is empty, and Economy behaves exactly as described
+above: treasuries accept only `shop.purchase` settlement and no resource can
+create currency in a bank account.
+
+When a server enables it, an account can be **bound to one operating resource**,
+and only that resource may move it, only with a closed set of reason codes:
+
+| Export | Access group | Binds / creates |
+|---|---|---|
+| `EnsureCharacterBankAccounts({ characterId, accountRef })` | `trustedBankProvisioners` | One `bank` account per currency for a character, per stable `accountRef` |
+| `EnsureBankReserve({ organizationId })` | `trustedBankProvisioners` | The organization's treasuries as a bank reserve operated by the caller (permanent) |
+| `EnsureOperatedTreasury({ organizationId })` | `trustedTreasuryOperators` | The organization's treasuries as an operated treasury of the caller (permanent) |
+| `ListAccountEntries({ accountId, limit, offset })` | `trustedReaders` | Journal history: privileged readers any account; others only accounts they serve |
+
+Reason codes (all exact; anything else is rejected):
+
+- `bank.deposit`, `bank.withdraw`: the acting character's own wallet and a character bank account.
+- `bank.transfer`: bank account to bank account; `bank.fee`: bank account to the system sink.
+- `bank.loan.*`, `bank.check.*`, `bank.box.*`, `bank.gold.exchange`, `bank.compensation`:
+  between character funds and the caller's own bank reserve.
+- `society.deposit`, `society.bill`: the acting character's wallet into the caller's operated treasury.
+- `society.withdraw`: the operated treasury into the acting character's wallet.
+- `society.payroll`, `society.refund`: the operated treasury into a character wallet.
+- `society.tax`: the operated treasury into the system sink.
+
+Supply stays policy-gated: a bank resource may issue only reason codes listed for it
+in `Config.BankSupply`, and each issue still needs a Core policy decision for the
+caller (`subject.resource`), for example
+`Config.servicePolicy['feather-economy']['bcc-banks']['economy.currency.issue']` in
+feather-admin. `Authorization.exemptBankSupply` stays `false`.
+
+Migrations 005 (bank account type and `account_ref`) and 006 (`economy_bank_reserves`
+binding table, shared by bank reserves and operated treasuries) are additive and keep
+existing rows unchanged.
+
+Read-only checks: `EconomyBankAccountGateSmokeTest`, `EconomyBankContractSmokeTest`.
+Named consumers: bcc-banks (bank accounts, reserves) and bcc-society (operated
+treasuries; deposit, withdraw, bills, payroll and taxes passed live with two players
+on 2026-10-11).

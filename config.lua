@@ -9,27 +9,23 @@ Config = {
             ['feather-shops'] = true,
             ['feather-admin'] = true
         },
-        -- May provision character bank accounts and bind bank reserves.
+        -- Operated accounts (extension, off by default). See README "Operated accounts".
+        -- May provision character bank accounts and bind organization treasuries as a
+        -- bank reserve operated by the caller. Example: ['bcc-banks'] = true.
         trustedBankProvisioners = {
-            ['feather-economy'] = true,
-            ['bcc-banks'] = true,
-            ['feather-admin'] = true
+            ['feather-economy'] = true
         },
-        -- Callers allowed to use the bank.* reason codes (deposit, withdraw,
-        -- transfer, fee, reserve settlements). They must also be in trustedTransactors.
-        trustedBankTransactors = {
-            ['feather-economy'] = true,
-            ['bcc-banks'] = true
-        },
-        -- Callers that may bind and operate an organization treasury with
-        -- society.* reasons (EnsureOperatedTreasury). They must also be in
+        -- May use the bank.* reason codes against accounts it serves. Also needs
         -- trustedTransactors.
-        trustedTreasuryOperators = {
-            ['bcc-society'] = true
+        trustedBankTransactors = {
+            ['feather-economy'] = true
         },
+        -- May bind an organization treasury as an operated treasury and move it only
+        -- with society.* reason codes. Also needs trustedTransactors.
+        -- Example: ['bcc-society'] = true.
+        trustedTreasuryOperators = {},
         -- May read the journal history of any account (ListAccountEntries). Other
-        -- trusted readers see only accounts they serve: bank transactors read bank
-        -- accounts, treasury operators read the treasury bound to them.
+        -- trusted readers see only accounts they serve.
         privilegedHistoryReaders = {
             ['feather-economy'] = true,
             ['feather-admin'] = true
@@ -38,32 +34,17 @@ Config = {
             ['feather-economy'] = true,
             ['feather-admin'] = true,
             ['feather-hud'] = true,
-            ['feather-shops'] = true,
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true,
-            ['bcc-stables'] = true,
-            ['bcc-shops'] = true,
-            ['bcc-craft'] = true
+            ['feather-shops'] = true
         },
         trustedProvisioners = {
             ['feather-economy'] = true,
             ['feather-character'] = true,
             ['feather-shops'] = true,
-            ['feather-admin'] = true,
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true,
-            ['bcc-stables'] = true,
-            ['bcc-shops'] = true,
-            ['bcc-craft'] = true
+            ['feather-admin'] = true
         },
         trustedTransactors = {
             ['feather-economy'] = true,
-            ['feather-shops'] = true,
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true,
-            ['bcc-stables'] = true,
-            ['bcc-shops'] = true,
-            ['bcc-craft'] = true
+            ['feather-shops'] = true
         },
         trustedReversers = {
             ['feather-economy'] = true,
@@ -74,24 +55,14 @@ Config = {
             ['feather-admin'] = true
         }
     },
-    -- Reason codes under which a bank resource may create or destroy currency.
-    -- Exact match only; anything not listed here is denied for that resource.
-    BankSupply = {
-        -- Loans, checks, box fees and gold exchange settle against the branch
-        -- reserve (see EnsureBankReserve); only the one-time balance import and
-        -- operator funding of a reserve still create currency.
-        ['bcc-banks'] = {
-            ['bank.migration.import'] = true,
-            ['bank.reserve.funding'] = true
-        }
-    },
+    -- Reason codes under which a bank resource may create or destroy currency, per
+    -- resource, exact match only. Empty: no bank supply. Supply still needs a Core
+    -- policy grant (economy.currency.issue) for the calling resource.
+    -- Example: ['bcc-banks'] = { ['bank.migration.import'] = true, ['bank.reserve.funding'] = true }
+    BankSupply = {},
     Authorization = {
         enabled = true,
-        -- When true, supply operations that match an exact Config.BankSupply entry
-        -- skip the Core policy check. Keep false: the Economy master plan requires
-        -- the trusted-resource and policy gates to stay independent. Bank supply is
-        -- granted in feather-admin configs/service_policy.lua
-        -- (['feather-economy']['bcc-banks']['economy.currency.issue']).
+        -- Keep false: bank supply also goes through the Core policy check.
         exemptBankSupply = false,
         issueAction = 'economy.currency.issue',
         destroyAction = 'economy.currency.destroy'
