@@ -43,7 +43,8 @@ Config = {
             ['bcc-society'] = true,
             ['bcc-stables'] = true,
             ['bcc-shops'] = true,
-            ['bcc-craft'] = true
+            ['bcc-craft'] = true,
+            ['bcc-housing'] = true
         },
         trustedProvisioners = {
             ['feather-economy'] = true,
@@ -54,7 +55,8 @@ Config = {
             ['bcc-society'] = true,
             ['bcc-stables'] = true,
             ['bcc-shops'] = true,
-            ['bcc-craft'] = true
+            ['bcc-craft'] = true,
+            ['bcc-housing'] = true
         },
         trustedTransactors = {
             ['feather-economy'] = true,
@@ -63,7 +65,8 @@ Config = {
             ['bcc-society'] = true,
             ['bcc-stables'] = true,
             ['bcc-shops'] = true,
-            ['bcc-craft'] = true
+            ['bcc-craft'] = true,
+            ['bcc-housing'] = true
         },
         trustedReversers = {
             ['feather-economy'] = true,
@@ -71,7 +74,8 @@ Config = {
         },
         trustedSuppliers = {
             ['feather-economy'] = true,
-            ['feather-admin'] = true
+            ['feather-admin'] = true,
+            ['bcc-housing'] = true
         }
     },
     -- Reason codes under which a bank resource may create or destroy currency.
