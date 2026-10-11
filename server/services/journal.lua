@@ -24,7 +24,138 @@ local function Failure(code, message, details)
     return EconomyResults.Err(code, message, details)
 end
 
-function EconomyJournal.AccountTypesAllowed(operation, from, to, request)
+-- Bank movements are a closed set keyed by reason code, and only for callers in
+-- Config.Access.trustedBankTransactors. Deposits and withdrawals stay inside one
+-- character's own wallet/bank pair; bank.transfer is the only owner-to-owner
+-- bank movement; fees can only flow to the system sink.
+local function SameCharacter(from, to)
+    return from.owner_type == 'character' and to.owner_type == 'character'
+        and type(from.owner_id) == 'string' and from.owner_id == to.owner_id
+end
+
+-- Deposits and withdrawals use the acting character's own wallet. A joint
+-- account holder may therefore fund or draw on an account owned by another
+-- character; whether that holder has access is the bank resource's rule, and the
+-- wallet side always has to belong to the acting character.
+local function ActsForWallet(wallet, from, to, context)
+    local actor = type(context) == 'table' and context.actorCharacterId or nil
+    if type(actor) == 'string' then
+        return type(wallet.owner_id) == 'string' and wallet.owner_type == 'character'
+            and wallet.owner_id:lower() == actor:lower()
+    end
+    return SameCharacter(from, to)
+end
+
+-- Bank callers may create or destroy currency only under reason codes that are
+-- explicitly allow-listed for them in Config.BankSupply. This never widens what
+-- shops or other callers can do.
+local function BankSupplyAllowed(resource, reasonCode)
+    local allowed = Config.BankSupply and Config.BankSupply[resource or '']
+    return type(allowed) == 'table' and allowed[reasonCode or ''] == true
+end
+EconomyJournal.BankSupplyAllowed = BankSupplyAllowed
+
+-- A bank reserve is an organization treasury bound to the calling resource by
+-- EnsureBankReserve. Journal posting reads it on the same transaction connection
+-- as the account balances; standalone account-type checks use DB.
+local function IsBankReserve(account, resource, database)
+    if account.account_type ~= 'treasury' or account.owner_type ~= 'organization'
+        or type(account.owner_id) ~= 'string' then return false end
+    return (database or DB).value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?',
+        account.owner_id:lower()) == resource
+end
+
+-- Bank products settle against the branch reserve rather than creating or
+-- destroying currency. Money paid in may come from any character bank account
+-- (the bank resource governs account access) or from the acting character's own
+-- wallet; money paid out may go to any character bank account or wallet.
+local ReserveIn = { ['bank.loan.repayment'] = true, ['bank.check.issue'] = true,
+    ['bank.box.fee'] = true, ['bank.gold.exchange'] = true }
+local ReserveOut = { ['bank.loan.disbursement'] = true, ['bank.check.cash'] = true,
+    ['bank.box.refund'] = true, ['bank.gold.exchange'] = true, ['bank.compensation'] = true }
+
+local function CharacterFunds(account)
+    return account.owner_type == 'character'
+        and (account.account_type == 'bank' or account.account_type == 'wallet')
+end
+
+local function ReserveTransferAllowed(from, to, reason, resource, context, database)
+    if ReserveIn[reason] and CharacterFunds(from) and IsBankReserve(to, resource, database) then
+        return from.account_type == 'bank' or ActsForWallet(from, from, to, context)
+    end
+    return ReserveOut[reason] == true and CharacterFunds(to) and IsBankReserve(from, resource, database)
+end
+
+local function BankTransferAllowed(from, to, request, resource, context, database)
+    local bankers = Config.Access.trustedBankTransactors
+    if type(bankers) ~= 'table' or bankers[resource or ''] ~= true then return false end
+    local reason = request.reasonCode
+    if ReserveIn[reason] or ReserveOut[reason] then
+        return ReserveTransferAllowed(from, to, reason, resource, context, database)
+    end
+    if reason == 'bank.deposit' then
+        return from.account_type == 'wallet' and to.account_type == 'bank'
+            and to.owner_type == 'character' and ActsForWallet(from, from, to, context)
+    elseif reason == 'bank.withdraw' then
+        return from.account_type == 'bank' and to.account_type == 'wallet'
+            and from.owner_type == 'character' and ActsForWallet(to, from, to, context)
+    elseif reason == 'bank.transfer' then
+        return from.account_type == 'bank' and to.account_type == 'bank'
+            and from.owner_type == 'character' and to.owner_type == 'character'
+    elseif reason == 'bank.fee' then
+        return from.account_type == 'bank' and to.account_type == 'system_sink'
+    end
+    return false
+end
+
+-- Operated treasuries: an organization treasury
+-- bound to one operator resource with EnsureOperatedTreasury (same binding table
+-- as bank reserves). Only callers in Config.Access.trustedTreasuryOperators may
+-- use society.* reasons, and only against a treasury they operate. Whether the
+-- acting character may move society money (rank permissions) is the operator
+-- resource's rule; Economy enforces the account shapes.
+local function SocietyTransferAllowed(from, to, request, resource, context, database)
+    local operators = Config.Access.trustedTreasuryOperators
+    if type(operators) ~= 'table' or operators[resource or ''] ~= true then return false end
+    local reason = request.reasonCode
+    if reason == 'society.deposit' or reason == 'society.bill' then
+        -- The acting character pays from their own wallet.
+        return from.account_type == 'wallet' and ActsForWallet(from, from, to, context)
+            and IsBankReserve(to, resource, database)
+    elseif reason == 'society.withdraw' then
+        -- Into the acting character's own wallet.
+        return IsBankReserve(from, resource, database)
+            and to.account_type == 'wallet' and ActsForWallet(to, from, to, context)
+    elseif reason == 'society.payroll' or reason == 'society.refund' then
+        return IsBankReserve(from, resource, database)
+            and to.account_type == 'wallet' and to.owner_type == 'character'
+    elseif reason == 'society.tax' then
+        return IsBankReserve(from, resource, database) and to.account_type == 'system_sink'
+    end
+    return false
+end
+
+function EconomyJournal.AccountTypesAllowed(operation, from, to, request, resource, context, database)
+    if operation == 'transfer' and BankTransferAllowed(from, to, request, resource, context, database) then
+        return true
+    end
+    if operation == 'transfer' and SocietyTransferAllowed(from, to, request, resource, context, database) then
+        return true
+    end
+    -- Bank supply: allow-listed reasons may credit a bank account from the system
+    -- source, fund a reserve the caller operates, or debit a bank account into the sink.
+    if BankSupplyAllowed(resource, request.reasonCode) then
+        if operation == 'issue' and from.account_type == 'system_source' and to.account_type == 'bank' then
+            return true
+        end
+        if operation == 'issue' and from.account_type == 'system_source'
+            and request.reasonCode == 'bank.reserve.funding' and IsBankReserve(to, resource, database) then
+            return true
+        end
+        if operation == 'destroy' and from.account_type == 'bank' and to.account_type == 'system_sink' then
+            return true
+        end
+    end
     return operation == 'transfer' and from.account_type == 'wallet'
         and (to.account_type == 'wallet' or to.account_type == 'system_sink'
             or (to.account_type == 'treasury' and to.owner_type == 'organization'
@@ -44,7 +175,9 @@ local function Post(operation, request, context)
     local trusted = operation == 'reversal' and Config.Access.trustedReversers
         or operation == 'transfer' and Config.Access.trustedTransactors
         or Config.Access.trustedSuppliers
-    if type(resource) ~= 'string' or not trusted[resource] then
+    local bankSupply = (operation == 'issue' or operation == 'destroy')
+        and BankSupplyAllowed(resource, request.reasonCode)
+    if type(resource) ~= 'string' or not (trusted[resource] or bankSupply) then
         return Failure('authorization_denied',
             'Calling resource is not authorized to transfer currency.')
     end
@@ -127,7 +260,7 @@ local function Post(operation, request, context)
             local first, second = request.fromAccountId, request.toAccountId
             if second < first then first, second = second, first end
             local accountRows = query([[
-                SELECT a.`account_id`,a.`owner_type`,a.`account_type`,a.`currency_code`,a.`status`,
+                SELECT a.`account_id`,a.`owner_type`,a.`owner_id`,a.`account_type`,a.`currency_code`,a.`status`,
                        b.`posted_amount`,b.`revision`
                 FROM `economy_accounts` a INNER JOIN `economy_balances` b
                   ON b.`account_id`=a.`account_id`
@@ -143,7 +276,7 @@ local function Post(operation, request, context)
             if from.currency_code ~= request.currency or to.currency_code ~= request.currency then
                 return Failure('currency_mismatch', 'Transfer accounts do not use the requested currency.')
             end
-            local typesAllowed = EconomyJournal.AccountTypesAllowed(operation, from, to, request)
+            local typesAllowed = EconomyJournal.AccountTypesAllowed(operation, from, to, request, resource, context, tx)
             if not typesAllowed then
                 return Failure('authorization_denied', 'These account types cannot use a normal transfer.')
             end

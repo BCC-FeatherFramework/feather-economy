@@ -51,6 +51,69 @@ function EconomyAPI.EnsureCharacterWallets(request, resource)
     return EconomyAccounts.EnsureCharacterWallets(request.characterId)
 end
 
+-- Provisions one bank account per currency for a character under a stable
+-- accountRef, so a character can hold several (for example one per branch).
+-- Like the treasury export it accepts only identity fields: no balances,
+-- account types or labels can be supplied by the caller.
+function EconomyAPI.EnsureCharacterBankAccounts(request, resource)
+    local allowed = Authorize(resource, 'trustedBankProvisioners')
+    if not allowed.ok then return allowed end
+    if EconomyFoundation.GetHealth().state ~= 'ready' then
+        return EconomyResults.Err('not_ready', 'Economy is not ready.')
+    end
+    if type(request) ~= 'table' then
+        return EconomyResults.Err('invalid_input', 'Character UUID required.')
+    end
+    for key in pairs(request) do
+        if key ~= 'characterId' and key ~= 'accountRef' then
+            return EconomyResults.Err('invalid_input', 'Unexpected bank provisioning field.')
+        end
+    end
+    local id = request.characterId
+    if type(id) ~= 'string' or not id:match(
+        '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') then
+        return EconomyResults.Err('invalid_input', 'Character UUID required.')
+    end
+    return EconomyAccounts.EnsureCharacterBankAccounts(id:lower(), request.accountRef)
+end
+
+-- Account history is private owner history. Besides the privileged readers, a
+-- caller sees only accounts it serves: bank resources read bank accounts, and an
+-- operator reads the treasury bound to it. Unknown and foreign accounts return
+-- the same denial so the answer does not reveal whether an account exists.
+local function CanReadHistory(accountId, resource)
+    local account = EconomyAccounts.Get(accountId)
+    if not account.ok then return false end
+    local value = account.value
+    if value.accountType == 'bank' then
+        local bankers = Config.Access.trustedBankTransactors
+        return type(bankers) == 'table' and bankers[resource] == true
+    end
+    if value.accountType == 'treasury' and value.ownerType == 'organization' and type(value.ownerId) == 'string' then
+        return DB.value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?',
+            value.ownerId:lower()) == resource
+    end
+    return false
+end
+
+function EconomyAPI.ListAccountEntries(request, resource)
+    local allowed = Authorize(resource, 'trustedReaders')
+    if not allowed.ok then return allowed end
+    request = type(request) == 'table' and request or {}
+    local privileged = Config.Access.privilegedHistoryReaders
+    if not (type(privileged) == 'table' and privileged[resource] == true) then
+        local id = request.accountId
+        if type(id) ~= 'string' or not id:match(
+            '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') then
+            return EconomyResults.Err('invalid_input', 'accountId must be a UUID.')
+        end
+        if not CanReadHistory(id, resource) then
+            return EconomyResults.Err('authorization_denied', 'Calling resource may not read this account history.')
+        end
+    end
+    return EconomyAccounts.ListEntries(request.accountId, request.limit, request.offset)
+end
+
 function EconomyAPI.GetSystemAccount(request, resource)
     local allowed = Authorize(resource, 'trustedReaders')
     if not allowed.ok then return allowed end
@@ -103,6 +166,90 @@ function EconomyAPI.EnsureOrganizationTreasuries(request, resource)
     return EconomyAccounts.EnsureOrganizationTreasuries(id)
 end
 
+-- Binds an active organization's treasuries as the calling bank's reserve. The
+-- first bank provisioner to bind an organization owns it permanently; binding a
+-- reserve another resource operates is rejected.
+function EconomyAPI.EnsureBankReserve(request, resource)
+    local allowed = Authorize(resource, 'trustedBankProvisioners')
+    if not allowed.ok then return allowed end
+    if EconomyFoundation.GetHealth().state ~= 'ready' then
+        return EconomyResults.Err('not_ready', 'Economy is not ready.')
+    end
+    if type(request) ~= 'table' then
+        return EconomyResults.Err('invalid_input', 'Organization UUID required.')
+    end
+    for key in pairs(request) do
+        if key ~= 'organizationId' then
+            return EconomyResults.Err('invalid_input', 'Unexpected bank reserve field.')
+        end
+    end
+    local id = request.organizationId
+    if type(id) ~= 'string' or not id:match(
+        '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') then
+        return EconomyResults.Err('invalid_input', 'Organization UUID required.')
+    end
+    id = id:lower()
+    local called, organization = pcall(function()
+        return exports['feather-organizations']:GetOrganization({ organizationId = id })
+    end)
+    if not called or type(organization) ~= 'table' or organization.ok ~= true
+        or type(organization.value) ~= 'table' or organization.value.organizationId ~= id then
+        return EconomyResults.Err('dependency_unavailable', 'Organization identity could not be verified.')
+    end
+    if organization.value.status ~= 'active' then
+        return EconomyResults.Err('organization_inactive', 'Active organization required for a bank reserve.')
+    end
+    DB.exec('INSERT IGNORE INTO `economy_bank_reserves` (`organization_id`,`operator_resource`) VALUES (?,?)',
+        id, resource)
+    local operator = DB.value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?', id)
+    if operator ~= resource then
+        return EconomyResults.Err('reserve_operator_conflict', 'That organization is another resource\'s bank reserve.')
+    end
+    return EconomyAccounts.EnsureOrganizationTreasuries(id)
+end
+
+-- Binds an active organization's treasuries to
+-- the calling resource as an operated treasury (society.* reasons). Uses the
+-- bank-reserve binding table: one operator per organization, permanently.
+function EconomyAPI.EnsureOperatedTreasury(request, resource)
+    local allowed = Authorize(resource, 'trustedTreasuryOperators')
+    if not allowed.ok then return allowed end
+    if EconomyFoundation.GetHealth().state ~= 'ready' then
+        return EconomyResults.Err('not_ready', 'Economy is not ready.')
+    end
+    if type(request) ~= 'table' then
+        return EconomyResults.Err('invalid_input', 'Organization UUID required.')
+    end
+    for key in pairs(request) do
+        if key ~= 'organizationId' then
+            return EconomyResults.Err('invalid_input', 'Unexpected operated treasury field.')
+        end
+    end
+    local id = request.organizationId
+    if type(id) ~= 'string' or not id:match(
+        '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') then
+        return EconomyResults.Err('invalid_input', 'Organization UUID required.')
+    end
+    id = id:lower()
+    local called, organization = pcall(function()
+        return exports['feather-organizations']:GetOrganization({ organizationId = id })
+    end)
+    if not called or type(organization) ~= 'table' or organization.ok ~= true
+        or type(organization.value) ~= 'table' or organization.value.organizationId ~= id then
+        return EconomyResults.Err('dependency_unavailable', 'Organization identity could not be verified.')
+    end
+    if organization.value.status ~= 'active' then
+        return EconomyResults.Err('organization_inactive', 'Active organization required for an operated treasury.')
+    end
+    DB.exec('INSERT IGNORE INTO `economy_bank_reserves` (`organization_id`,`operator_resource`) VALUES (?,?)',
+        id, resource)
+    local operator = DB.value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?', id)
+    if operator ~= resource then
+        return EconomyResults.Err('treasury_operator_conflict', 'That organization treasury is operated by another resource.')
+    end
+    return EconomyAccounts.EnsureOrganizationTreasuries(id)
+end
+
 function EconomyAPI.Transfer(request, context, resource)
     context = type(context) == 'table' and context or {}
     context.resource = resource
@@ -120,13 +267,16 @@ end
 local function Supply(operation, request, context, resource)
     context = type(context) == 'table' and context or {}
     context.resource = resource
-    if Config.Authorization.enabled == true then
+    local exempt = Config.Authorization.exemptBankSupply == true
+        and EconomyJournal.BankSupplyAllowed(resource, request and request.reasonCode)
+    if Config.Authorization.enabled == true and not exempt then
         local action = operation == 'issue' and Config.Authorization.issueAction
             or Config.Authorization.destroyAction
         local decision = exports['feather-core']:Authorize(action, {
             source = context.actorSource,
             correlationId = context.correlationId,
-            subject = { operation = operation, accountId = request and request.accountId,
+            -- resource lets the policy provider match a service grant for the caller.
+            subject = { resource = resource, operation = operation, accountId = request and request.accountId,
                 currency = request and request.currency, amount = request and request.amount }
         })
         if type(decision) ~= 'table' or not decision.ok
@@ -163,6 +313,18 @@ exports('EnsureCharacterWallets', function(request)
 end)
 exports('EnsureOrganizationTreasuries', function(request)
     return EconomyAPI.EnsureOrganizationTreasuries(request, GetInvokingResource())
+end)
+exports('EnsureBankReserve', function(request)
+    return EconomyAPI.EnsureBankReserve(request, GetInvokingResource())
+end)
+exports('EnsureOperatedTreasury', function(request)
+    return EconomyAPI.EnsureOperatedTreasury(request, GetInvokingResource())
+end)
+exports('EnsureCharacterBankAccounts', function(request)
+    return EconomyAPI.EnsureCharacterBankAccounts(request, GetInvokingResource())
+end)
+exports('ListAccountEntries', function(request)
+    return EconomyAPI.ListAccountEntries(request, GetInvokingResource())
 end)
 exports('GetSystemAccount', function(request)
     return EconomyAPI.GetSystemAccount(request, GetInvokingResource())
