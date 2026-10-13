@@ -37,6 +37,7 @@ Config = {
         },
         trustedReaders = {
             ['feather-economy'] = true,
+            ['feather-contracts'] = true,
             ['feather-admin'] = true,
             ['feather-hud'] = true,
             ['feather-shops'] = true,
@@ -61,6 +62,7 @@ Config = {
         },
         trustedTransactors = {
             ['feather-economy'] = true,
+            ['feather-contracts'] = true,
             ['feather-shops'] = true,
             ['bcc-banks'] = true,
             ['bcc-society'] = true,
