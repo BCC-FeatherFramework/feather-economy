@@ -22,3 +22,41 @@ end
 -- Trust('my-bank', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors',
 --     'trustedBankProvisioners', 'trustedBankTransactors', 'trustedTreasuryOperators' })
 -- Config.OperatorSupply['my-bank'] = { ['bank.migration.import'] = true }
+
+-- This server -------------------------------------------------------------
+
+-- Reconciles and settles obligations such as rent and tax (GetTransaction, Transfer).
+Trust('feather-contracts', { 'trustedReaders', 'trustedTransactors' })
+
+-- Store purchases paid into the system sink.
+Trust('bcc-shops', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors' })
+
+-- Crafting book purchases paid into the system sink.
+Trust('bcc-craft', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors' })
+
+-- Horse, tack and taming purchases paid into the system sink. Horse sales to the
+-- stable pay out with Issue and are refused until bcc-stables is also a
+-- trustedSupplier with the economy.currency.issue grant.
+Trust('bcc-stables', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors' })
+
+-- House purchases, rent and tax. Sale back to the housing agent and furniture
+-- sell-back create money (also needs the economy.currency.issue grant).
+Trust('bcc-housing', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors',
+    'trustedSuppliers' })
+
+-- Business treasuries: deposits, withdrawals, payroll, bills and tax, with the
+-- society.* reasons it registers.
+Trust('bcc-society', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors',
+    'trustedTreasuryOperators' })
+
+-- Bank accounts (one per character and branch), statements and branch reserve
+-- treasuries, with the bank.* reasons it registers. Loans, checks, box fees and
+-- gold exchange settle against the branch reserve; only the one-time balance
+-- import and funding a reserve create currency (also needs the
+-- economy.currency.issue grant).
+Trust('bcc-banks', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors',
+    'trustedBankProvisioners', 'trustedBankTransactors', 'trustedTreasuryOperators' })
+Config.OperatorSupply['bcc-banks'] = {
+    ['bank.migration.import'] = true,
+    ['bank.reserve.funding'] = true
+}
