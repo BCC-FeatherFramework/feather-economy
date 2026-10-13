@@ -23,9 +23,6 @@ checksum mismatch and failure; supply policy failure; restart recovery.
   - The `economy_dev_migration_fault` startup switch (DevMode).
   - Every development test takes a character UUID or a server id
     (`server/test_support.lua`) and posts test funds through the journal.
-- `config_access.lua`: a server's own consumers, added with
-  `Trust(resource, groups)` after `config.lua`, so `config.lua` keeps only
-  Feather resources and upgrades never touch a server's trust entries.
 - `EconomyAccountContractSmokeTest` checks the signs of the system balances
   instead of requiring zero. The old check failed after the first supply.
 
