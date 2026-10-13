@@ -1,6 +1,8 @@
 Config = {
     Contract = 1,
     RequiredCoreContract = 1,
+    -- Registers the data-changing console tests and the migration fault switch.
+    -- Development servers only; keep false for production.
     DevMode = false,
     SystemOwnerId = '00000000-0000-0000-0000-000000000001',
     Access = {
@@ -92,6 +94,9 @@ Config = {
             ['bank.reserve.funding'] = true
         }
     },
+    -- Issue and Destroy need an explicit Core policy grant (issueAction or
+    -- destroyAction) for the calling resource. Keep enabled for production;
+    -- trust lists alone never allow creating or destroying currency.
     Authorization = {
         enabled = true,
         issueAction = 'economy.currency.issue',
