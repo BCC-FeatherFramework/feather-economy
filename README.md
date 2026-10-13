@@ -46,9 +46,13 @@ Release gates, passed on the development server (DevMode) on 2026-10-13:
   the migration and statement, nothing kept; dependents fail to start.
 - Migration 007 applied on an existing install.
 
+Production profile (DevMode off) on 2026-10-13, all read-only: release
+contract 7/7, release gate 23/23, foundation 6/6, account contract 7/7, bank
+contract 14/14, transaction read 9/9, journal audit 5/5 (pending=0), and
+ownership check 0 errors.
+
 ### Open
 
-- Repeat the read-only tests in the production profile (DevMode off).
 - Admin money commands target only connected characters; offline correction
   and Admin Economy screens are not available yet.
 - Not implemented: account closure, holds, credit, `GetBalance`,

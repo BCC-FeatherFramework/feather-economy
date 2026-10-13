@@ -8,7 +8,7 @@ numbers refer to the plan as of its 2026-09-18 checkpoint.
 
 - **Last revised:** 2026-10-13
 - **Status:** Contract 1 implemented through E6. Release gates passed on the
-  development server on 2026-10-13; the production-profile rerun is pending.
+  development server and again in the production profile on 2026-10-13.
 
 ## Section 2.1, Admin row
 
@@ -76,7 +76,7 @@ Add the test that covers each gate:
 | Exact retry; mismatched payload | `EconomySupplyTest`, `EconomyRestartTest` | passed, also after restart |
 | Restart preserves balances, journal, outbox, replay | `EconomyRestartTest prepare/verify` | passed 10/10 |
 | Unauthorized supply and policy-provider failure | `EconomyReleaseGateSmokeTest` (missing, denying, failing, invalid provider; untrusted supplier; Core) | passed |
-| Bounded reads; history paging and ordering | `EconomyReleaseGateSmokeTest`, `EconomyHistoryPaginationTest`, `EconomyBankContractSmokeTest` | passed (bank contract: rerun in production profile) |
+| Bounded reads; history paging and ordering | `EconomyReleaseGateSmokeTest`, `EconomyHistoryPaginationTest`, `EconomyBankContractSmokeTest` | passed (bank contract 14/14) |
 | No first-party writer of Economy tables | `tools/ownership-check.js` | passed |
 | Shops payment, fulfillment, restart, reconciliation | Shops live tests | passed |
 
@@ -89,15 +89,14 @@ resource's business logic, built on these shapes.
 
 ## Section 14, remaining work
 
-1. Rerun the read-only release tests with DevMode off and record them.
-2. Admin: accept a character UUID for offline wallet corrections. Record the
+1. Admin: accept a character UUID for offline wallet corrections. Record the
    staff character, not the target, as `actorCharacterId`. Remove or wire the
    legacy client Economy screens. Add Economy grants to Admin's release smoke
    test.
-3. Validate clean recipe deployment with merged upstream resources.
-4. Upstream the fork's additions in the order given in
+2. Validate clean recipe deployment with merged upstream resources.
+3. Upstream the fork's additions in the order given in
    `feather-economy/docs/upstream/`.
-5. `feather-contracts`: replace its test's direct read of
+4. `feather-contracts`: replace its test's direct read of
    `economy_transactions` with `GetTransaction`.
 
 ## New checkpoint
@@ -114,4 +113,7 @@ failure. All console tests take character UUIDs and run with nobody online.
 DevMode is off and supply policy is on. On the development server the release
 gate passed 23/23, migration faults 8/8, pagination 10/10 and restart 10/10
 across a full server restart; a failing migration stopped startup with an
-actionable error and kept nothing.
+actionable error and kept nothing. With DevMode off, every read-only test
+passed (release contract 7/7, release gate 23/23, foundation 6/6, account
+contract 7/7, bank contract 14/14, transaction read 9/9, journal audit 5/5),
+and the ownership check found 0 errors.
