@@ -9,22 +9,23 @@ Config = {
             ['feather-shops'] = true,
             ['feather-admin'] = true
         },
-        -- May provision character bank accounts and bind bank reserves.
+        -- Operated accounts (README "Operated accounts"). May provision character
+        -- bank accounts (EnsureCharacterBankAccounts).
         trustedBankProvisioners = {
             ['feather-economy'] = true,
             ['bcc-banks'] = true,
             ['feather-admin'] = true
         },
-        -- Callers allowed to use the bank.* reason codes (deposit, withdraw,
-        -- transfer, fee, reserve settlements). They must also be in trustedTransactors.
+        -- May register reason codes whose shapes move character bank accounts.
+        -- They must also be in trustedTransactors.
         trustedBankTransactors = {
             ['feather-economy'] = true,
             ['bcc-banks'] = true
         },
-        -- Callers that may bind and operate an organization treasury with
-        -- society.* reasons (EnsureOperatedTreasury). They must also be in
-        -- trustedTransactors.
+        -- May bind organization treasuries (EnsureOperatedTreasury) and register
+        -- reason codes whose shapes move them. They must also be in trustedTransactors.
         trustedTreasuryOperators = {
+            ['bcc-banks'] = true,
             ['bcc-society'] = true
         },
         -- May read the journal history of any account (ListAccountEntries). Other
@@ -78,12 +79,12 @@ Config = {
             ['bcc-housing'] = true
         }
     },
-    -- Reason codes under which a bank resource may create or destroy currency.
-    -- Exact match only; anything not listed here is denied for that resource.
-    BankSupply = {
+    -- Reason codes an operator may create currency with (issue_to_bank and
+    -- issue_to_operated shapes), per resource, exact match only. Each issue still
+    -- needs a Core policy grant (economy.currency.issue) for the resource.
+    OperatorSupply = {
         -- Loans, checks, box fees and gold exchange settle against the branch
-        -- reserve (see EnsureBankReserve); only the one-time balance import and
-        -- operator funding of a reserve still create currency.
+        -- reserve; only the one-time balance import and funding a reserve create currency.
         ['bcc-banks'] = {
             ['bank.migration.import'] = true,
             ['bank.reserve.funding'] = true
@@ -91,12 +92,6 @@ Config = {
     },
     Authorization = {
         enabled = true,
-        -- When true, supply operations that match an exact Config.BankSupply entry
-        -- skip the Core policy check. Keep false: the Economy master plan requires
-        -- the trusted-resource and policy gates to stay independent. Bank supply is
-        -- granted in feather-admin configs/service_policy.lua
-        -- (['feather-economy']['bcc-banks']['economy.currency.issue']).
-        exemptBankSupply = false,
         issueAction = 'economy.currency.issue',
         destroyAction = 'economy.currency.destroy'
     },

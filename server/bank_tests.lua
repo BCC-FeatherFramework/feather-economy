@@ -10,67 +10,158 @@ local function Counter(name)
     end, function() return passed, total end
 end
 
+-- Runs `body` with two test-only operators trusted and their reasons registered,
+-- then restores the configuration and releases the registrations.
+local OPERATOR, OTHER = 'economy-gate-operator', 'economy-gate-other'
+local function WithTestOperators(body)
+    local groups = { 'trustedBankTransactors', 'trustedTreasuryOperators', 'trustedTransactors' }
+    local saved = {}
+    for _, group in ipairs(groups) do
+        Config.Access[group] = Config.Access[group] or {}
+        saved[group] = { Config.Access[group][OPERATOR], Config.Access[group][OTHER] }
+        Config.Access[group][OPERATOR] = true
+    end
+    Config.Access.trustedTreasuryOperators[OTHER] = true
+    Config.OperatorSupply = Config.OperatorSupply or {}
+    local savedSupply = Config.OperatorSupply[OPERATOR]
+    Config.OperatorSupply[OPERATOR] = { ['gate.import'] = true, ['gate.funding'] = true }
+    local called, failure = pcall(body)
+    EconomyOperators.Unregister(OPERATOR)
+    EconomyOperators.Unregister(OTHER)
+    Config.OperatorSupply[OPERATOR] = savedSupply
+    for _, group in ipairs(groups) do
+        Config.Access[group][OPERATOR], Config.Access[group][OTHER] = saved[group][1], saved[group][2]
+    end
+    if not called then error(failure, 0) end
+end
+
 RegisterCommand('EconomyBankAccountGateSmokeTest', function(source)
     if source ~= 0 then return end
     local Check, Result = Counter('EconomyBankAccountGateSmokeTest')
-    local owner = '11111111-1111-1111-1111-111111111111'
-    local other = '22222222-2222-2222-2222-222222222222'
-    local wallet = { account_type = 'wallet', owner_type = 'character', owner_id = owner }
-    local bank = { account_type = 'bank', owner_type = 'character', owner_id = owner }
-    local otherWallet = { account_type = 'wallet', owner_type = 'character', owner_id = other }
-    local otherBank = { account_type = 'bank', owner_type = 'character', owner_id = other }
-    local sink = { account_type = 'system_sink', owner_type = 'system' }
-    local treasury = { account_type = 'treasury', owner_type = 'organization', owner_id = owner }
-    local allowed = EconomyJournal.AccountTypesAllowed
-    local banker = 'bcc-banks'
-    local asOwner, asOther = { actorCharacterId = owner }, { actorCharacterId = other }
+    WithTestOperators(function()
+        local owner = '11111111-1111-1111-1111-111111111111'
+        local other = '22222222-2222-2222-2222-222222222222'
+        local boundOrg = '33333333-3333-3333-3333-333333333333'
+        local otherOrg = '44444444-4444-4444-4444-444444444444'
+        local wallet = { account_type = 'wallet', owner_type = 'character', owner_id = owner }
+        local bank = { account_type = 'bank', owner_type = 'character', owner_id = owner }
+        local otherWallet = { account_type = 'wallet', owner_type = 'character', owner_id = other }
+        local otherBank = { account_type = 'bank', owner_type = 'character', owner_id = other }
+        local sink = { account_type = 'system_sink', owner_type = 'system' }
+        local source = { account_type = 'system_source', owner_type = 'system' }
+        local treasury = { account_type = 'treasury', owner_type = 'organization', owner_id = boundOrg }
+        local otherTreasury = { account_type = 'treasury', owner_type = 'organization', owner_id = otherOrg }
+        local unbound = { account_type = 'treasury', owner_type = 'organization', owner_id = owner }
+        -- Stand-in for the binding table: boundOrg is operated by OPERATOR, otherOrg by OTHER.
+        local bindings = { [boundOrg] = OPERATOR, [otherOrg] = OTHER }
+        local database = { value = function(_, organizationId) return bindings[organizationId] end }
+        local asOwner, asOther = { actorCharacterId = owner }, { actorCharacterId = other }
+        local function allowed(operation, from, to, reason, resource, context)
+            return EconomyJournal.AccountTypesAllowed(operation, from, to, { reasonCode = reason },
+                resource or OPERATOR, context, database) == true
+        end
 
-    Check('deposit own wallet to own bank', allowed('transfer', wallet, bank, { reasonCode = 'bank.deposit' }, banker, asOwner) == true)
-    Check('withdraw own bank to own wallet', allowed('transfer', bank, wallet, { reasonCode = 'bank.withdraw' }, banker, asOwner) == true)
-    Check('bank to another bank transfer', allowed('transfer', bank, otherBank, { reasonCode = 'bank.transfer' }, banker) == true)
-    Check('bank fee to system sink', allowed('transfer', bank, sink, { reasonCode = 'bank.fee' }, banker) == true)
+        local registered = EconomyAPI.RegisterOperatedReasons({ reasons = {
+            ['gate.deposit'] = 'actor_wallet_to_bank',
+            ['gate.withdraw'] = 'bank_to_actor_wallet',
+            ['gate.transfer'] = 'bank_to_bank',
+            ['gate.fee'] = 'bank_to_sink',
+            ['gate.pay_in'] = { 'actor_wallet_to_operated', 'bank_to_operated' },
+            ['gate.pay_out'] = { 'operated_to_wallet', 'operated_to_bank' },
+            ['gate.take'] = 'operated_to_actor_wallet',
+            ['gate.tax'] = 'operated_to_sink',
+            ['gate.import'] = 'issue_to_bank',
+            ['gate.funding'] = 'issue_to_operated'
+        } }, OPERATOR)
+        Check('operator registers its reasons', registered.ok and registered.value.registered == 10)
+        local replaced = EconomyAPI.RegisterOperatedReasons({ reasons = {
+            ['gate.deposit'] = 'actor_wallet_to_bank', ['gate.withdraw'] = 'bank_to_actor_wallet',
+            ['gate.transfer'] = 'bank_to_bank', ['gate.fee'] = 'bank_to_sink',
+            ['gate.pay_in'] = { 'actor_wallet_to_operated', 'bank_to_operated' },
+            ['gate.pay_out'] = { 'operated_to_wallet', 'operated_to_bank' },
+            ['gate.take'] = 'operated_to_actor_wallet', ['gate.tax'] = 'operated_to_sink',
+            ['gate.import'] = 'issue_to_bank', ['gate.funding'] = 'issue_to_operated'
+        } }, OPERATOR)
+        Check('re-registering replaces', replaced.ok and replaced.value.registered == 10)
+        local conflict = EconomyAPI.RegisterOperatedReasons({ reasons = { ['gate.deposit'] = 'operated_to_sink' } }, OTHER)
+        Check('another operator cannot take a code', not conflict.ok and conflict.code == 'reason_conflict')
+        local otherOk = EconomyAPI.RegisterOperatedReasons({ reasons = { ['other.tax'] = 'operated_to_sink',
+            ['other.pay_in'] = 'actor_wallet_to_operated', ['other.mint'] = 'issue_to_operated' } }, OTHER)
+        Check('second operator registers own codes', otherOk.ok)
+        local bankShape = EconomyAPI.RegisterOperatedReasons({ reasons = { ['other.fee'] = 'bank_to_sink' } }, OTHER)
+        Check('treasury operator cannot use bank shapes', not bankShape.ok and bankShape.code == 'authorization_denied')
+        Check('reserved prefix rejected', not EconomyAPI.RegisterOperatedReasons({ reasons = {
+            ['shop.purchase'] = 'actor_wallet_to_operated' } }, OTHER).ok)
+        Check('unknown shape rejected', not EconomyAPI.RegisterOperatedReasons({ reasons = {
+            ['other.x'] = 'anything' } }, OTHER).ok)
+        Check('untrusted resource cannot register', not EconomyAPI.RegisterOperatedReasons({ reasons = {
+            ['x.y'] = 'operated_to_sink' } }, 'untrusted-resource').ok)
+        Check('failed registration kept earlier codes', EconomyOperators.Registered(OTHER)['other.tax'] ~= nil)
 
-    Check('deposit without actor uses same-owner rule', allowed('transfer', wallet, bank, { reasonCode = 'bank.deposit' }, banker) == true)
-    Check('joint holder deposits from own wallet', allowed('transfer', otherWallet, bank, { reasonCode = 'bank.deposit' }, banker, asOther) == true)
-    Check('joint holder withdraws to own wallet', allowed('transfer', bank, otherWallet, { reasonCode = 'bank.withdraw' }, banker, asOther) == true)
-    Check('joint deposit from another wallet rejected', not allowed('transfer', otherWallet, bank, { reasonCode = 'bank.deposit' }, banker, asOwner))
-    Check('joint withdraw to another wallet rejected', not allowed('transfer', bank, otherWallet, { reasonCode = 'bank.withdraw' }, banker, asOwner))
-    Check('joint without actor rejected', not allowed('transfer', otherWallet, bank, { reasonCode = 'bank.deposit' }, banker))
-    Check('untrusted caller rejected', not allowed('transfer', wallet, bank, { reasonCode = 'bank.deposit' }, 'feather-shops'))
-    Check('missing caller rejected', not allowed('transfer', wallet, bank, { reasonCode = 'bank.deposit' }))
-    Check('deposit with mismatched actor rejected', not allowed('transfer', wallet, otherBank, { reasonCode = 'bank.deposit' }, banker, asOther))
-    Check('withdraw with mismatched actor rejected', not allowed('transfer', bank, otherWallet, { reasonCode = 'bank.withdraw' }, banker, asOwner))
-    Check('wallet to bank needs bank reason', not allowed('transfer', wallet, bank, { reasonCode = 'shop.purchase' }, banker))
-    Check('bank to wallet needs bank reason', not allowed('transfer', bank, wallet, {}, banker))
-    Check('wallet cannot use withdraw reason', not allowed('transfer', wallet, bank, { reasonCode = 'bank.withdraw' }, banker))
-    Check('bank cannot be shop-settled', not allowed('transfer', bank, treasury, { reasonCode = 'bank.transfer' }, banker))
-    Check('bank to wallet of another owner via transfer rejected', not allowed('transfer', bank, otherWallet, { reasonCode = 'bank.transfer' }, banker))
-    Check('fee cannot target a wallet', not allowed('transfer', bank, wallet, { reasonCode = 'bank.fee' }, banker))
-    Check('bank cannot be issued to', not allowed('issue', { account_type = 'system_source', owner_type = 'system' }, bank, { reasonCode = 'bank.deposit' }, banker))
-    Check('bank cannot be destroyed from', not allowed('destroy', bank, sink, { reasonCode = 'bank.fee' }, banker))
-    Check('bank cannot be reversal target', not allowed('reversal', sink, bank, { reasonCode = 'bank.deposit' }, banker))
-    local source = { account_type = 'system_source', owner_type = 'system' }
-    Check('allow-listed issue to bank', allowed('issue', source, bank, { reasonCode = 'bank.migration.import' }, banker) == true)
-    Check('loan supply retired', not allowed('issue', source, bank, { reasonCode = 'bank.loan.disbursement' }, banker))
-    Check('repayment destroy retired', not allowed('destroy', bank, sink, { reasonCode = 'bank.loan.repayment' }, banker))
-    Check('unlisted reason cannot issue to bank', not allowed('issue', source, bank, { reasonCode = 'bank.anything' }, banker))
-    Check('other caller cannot issue to bank', not allowed('issue', source, bank, { reasonCode = 'bank.migration.import' }, 'bcc-shops'))
-    Check('unbound treasury is not a reserve', not allowed('transfer', treasury, bank, { reasonCode = 'bank.loan.disbursement' }, banker))
-    Check('unbound treasury cannot take repayment', not allowed('transfer', bank, treasury, { reasonCode = 'bank.loan.repayment' }, banker))
-    Check('unbound treasury cannot be funded', not allowed('issue', source, treasury, { reasonCode = 'bank.reserve.funding' }, banker))
-    Check('bank supply lookup', EconomyJournal.BankSupplyAllowed(banker, 'bank.reserve.funding') == true
-        and EconomyJournal.BankSupplyAllowed(banker, 'bank.check.cash') == false
-        and EconomyJournal.BankSupplyAllowed(nil, nil) == false)
-    Check('existing wallet transfer unchanged', allowed('transfer', wallet, otherWallet, {}, banker) == true)
+        Check('deposit own wallet to own bank', allowed('transfer', wallet, bank, 'gate.deposit', nil, asOwner))
+        Check('withdraw own bank to own wallet', allowed('transfer', bank, wallet, 'gate.withdraw', nil, asOwner))
+        Check('joint holder deposits from own wallet', allowed('transfer', otherWallet, bank, 'gate.deposit', nil, asOther))
+        Check('deposit without actor uses same-owner rule', allowed('transfer', wallet, bank, 'gate.deposit'))
+        Check('deposit from another wallet rejected', not allowed('transfer', otherWallet, bank, 'gate.deposit', nil, asOwner))
+        Check('withdraw to another wallet rejected', not allowed('transfer', bank, otherWallet, 'gate.withdraw', nil, asOwner))
+        Check('joint without actor rejected', not allowed('transfer', otherWallet, bank, 'gate.deposit'))
+        Check('bank to bank transfer', allowed('transfer', bank, otherBank, 'gate.transfer'))
+        Check('bank transfer cannot reach a wallet', not allowed('transfer', bank, otherWallet, 'gate.transfer'))
+        Check('fee to system sink', allowed('transfer', bank, sink, 'gate.fee'))
+        Check('fee cannot target a wallet', not allowed('transfer', bank, wallet, 'gate.fee'))
+        Check('wrong reason for the shape rejected', not allowed('transfer', wallet, bank, 'gate.withdraw', nil, asOwner))
+        Check('unregistered reason rejected', not allowed('transfer', wallet, bank, 'gate.unknown', nil, asOwner))
+        Check('another resource cannot use the codes', not allowed('transfer', wallet, bank, 'gate.deposit', OTHER, asOwner))
+
+        Check('pay in from actor wallet', allowed('transfer', wallet, treasury, 'gate.pay_in', nil, asOwner))
+        Check('pay in from a bank account', allowed('transfer', bank, treasury, 'gate.pay_in'))
+        Check('pay in from another wallet rejected', not allowed('transfer', otherWallet, treasury, 'gate.pay_in', nil, asOwner))
+        Check('pay out to any wallet', allowed('transfer', treasury, otherWallet, 'gate.pay_out'))
+        Check('pay out to a bank account', allowed('transfer', treasury, otherBank, 'gate.pay_out'))
+        Check('take only to actor wallet', allowed('transfer', treasury, wallet, 'gate.take', nil, asOwner)
+            and not allowed('transfer', treasury, otherWallet, 'gate.take', nil, asOwner))
+        Check('tax to system sink', allowed('transfer', treasury, sink, 'gate.tax'))
+        Check('unbound treasury rejected', not allowed('transfer', wallet, unbound, 'gate.pay_in', nil, asOwner)
+            and not allowed('transfer', unbound, wallet, 'gate.pay_out'))
+        Check('cannot move a treasury another resource operates',
+            not allowed('transfer', otherTreasury, otherWallet, 'gate.pay_out')
+            and not allowed('transfer', otherTreasury, sink, 'gate.tax'))
+        Check('other operator moves only its own treasury',
+            allowed('transfer', otherTreasury, sink, 'other.tax', OTHER)
+            and not allowed('transfer', treasury, sink, 'other.tax', OTHER))
+        Check('shop.purchase still needs a shop order', not allowed('transfer', wallet, treasury, 'shop.purchase', nil, asOwner))
+
+        Check('listed supply to a bank account', allowed('issue', source, bank, 'gate.import'))
+        Check('listed supply to own treasury', allowed('issue', source, treasury, 'gate.funding'))
+        Check('supply to another treasury rejected', not allowed('issue', source, otherTreasury, 'gate.funding'))
+        Check('registered supply not in OperatorSupply rejected',
+            not allowed('issue', source, otherTreasury, 'other.mint', OTHER)
+            and not EconomyOperators.SupplyAllowed(OTHER, 'other.mint'))
+        Check('transfer reason cannot issue', not allowed('issue', source, bank, 'gate.deposit'))
+        Check('supply reason cannot transfer', not allowed('transfer', wallet, bank, 'gate.import', nil, asOwner))
+        Check('nothing destroys from a bank account', not allowed('destroy', bank, sink, 'gate.fee'))
+        Check('supply lookup', EconomyOperators.SupplyAllowed(OPERATOR, 'gate.funding')
+            and not EconomyOperators.SupplyAllowed(OPERATOR, 'gate.deposit')
+            and not EconomyOperators.SupplyAllowed(OTHER, 'gate.funding')
+            and not EconomyOperators.SupplyAllowed(nil, nil))
+        Config.OperatorSupply[OPERATOR] = {}
+        Check('supply stops when delisted', not allowed('issue', source, bank, 'gate.import')
+            and not EconomyOperators.SupplyAllowed(OPERATOR, 'gate.import'))
+
+        EconomyOperators.Unregister(OPERATOR)
+        Check('released codes stop working', not allowed('transfer', bank, sink, 'gate.fee'))
+        Check('v1 wallet transfer unchanged', allowed('transfer', wallet, otherWallet, 'any.reason'))
+    end)
     local passed, total = Result()
-    print(('[EconomyBankAccountGateSmokeTest] done %d/%d passed (isolated account-type gate; no funds moved)'):format(passed, total))
+    print(('[EconomyBankAccountGateSmokeTest] done %d/%d passed (test operators only; no funds moved)'):format(passed, total))
 end, true)
 
 RegisterCommand('EconomyBankContractSmokeTest', function(source)
     if source ~= 0 then return end
     local Check, Result = Counter('EconomyBankContractSmokeTest')
     local features = EconomyAPI.GetCapabilities().value.features
-    Check('bank capabilities', features.bankAccounts == 1 and features.accountHistory == 1)
+    Check('operated account capabilities', features.bankAccounts == 1 and features.operatedTreasuries == 1
+        and features.accountHistory == 1)
     local denied = EconomyAPI.EnsureCharacterBankAccounts({ characterId = Config.SystemOwnerId }, 'untrusted-resource')
     Check('untrusted provision rejected', not denied.ok and denied.code == 'authorization_denied')
     local invalid = EconomyAPI.EnsureCharacterBankAccounts({}, 'feather-economy')
@@ -135,32 +226,36 @@ RegisterCommand('EconomyBankLiveTest', function(source, args)
         local walletStart, bankStart = wallet.balance, bank.balance
         local sink = EconomyAPI.GetSystemAccount({ currency = 'dollars', accountType = 'system_sink' }, 'feather-economy')
         assert(sink.ok, 'system sink unavailable')
+        local registered = EconomyAPI.RegisterOperatedReasons({ reasons = {
+            ['test.deposit'] = 'actor_wallet_to_bank', ['test.withdraw'] = 'bank_to_actor_wallet',
+            ['test.fee'] = 'bank_to_sink' } }, 'feather-economy')
+        assert(registered.ok, 'reason registration failed: ' .. tostring(registered.code))
         local function Move(from, to, amount, reason, key, resource)
             return EconomyAPI.Transfer({ fromAccountId = from.accountId, toAccountId = to.accountId,
                 currency = 'dollars', amount = amount, reasonCode = reason, idempotencyKey = requestId .. ':' .. key
             }, { actorCharacterId = characterId }, resource or 'feather-economy')
         end
         local funded = EconomyAPI.Issue({ accountId = wallet.accountId, currency = 'dollars', amount = 1000,
-            reasonCode = 'bank.test_funding', idempotencyKey = requestId .. ':fund' }, {}, 'feather-economy')
+            reasonCode = 'test.funding', idempotencyKey = requestId .. ':fund' }, {}, 'feather-economy')
         assert(funded.ok, 'funding failed: ' .. tostring(funded.code))
-        local deposit = Move(wallet, bank, 600, 'bank.deposit', 'deposit')
+        local deposit = Move(wallet, bank, 600, 'test.deposit', 'deposit')
         assert(deposit.ok, 'deposit failed: ' .. tostring(deposit.code))
-        local replay = Move(wallet, bank, 600, 'bank.deposit', 'deposit')
+        local replay = Move(wallet, bank, 600, 'test.deposit', 'deposit')
         assert(replay.ok and replay.value.replayed == true and replay.value.transactionId == deposit.value.transactionId, 'deposit replay failed')
-        local overdraw = Move(bank, wallet, 601, 'bank.withdraw', 'overdraw')
+        local overdraw = Move(bank, wallet, 601, 'test.withdraw', 'overdraw')
         assert(not overdraw.ok and overdraw.code == 'insufficient_funds', 'overdraw was not rejected')
-        local withdraw = Move(bank, wallet, 100, 'bank.withdraw', 'withdraw')
+        local withdraw = Move(bank, wallet, 100, 'test.withdraw', 'withdraw')
         assert(withdraw.ok, 'withdraw failed: ' .. tostring(withdraw.code))
-        local fee = Move(bank, sink.value, 50, 'bank.fee', 'fee')
+        local fee = Move(bank, sink.value, 50, 'test.fee', 'fee')
         assert(fee.ok, 'fee failed: ' .. tostring(fee.code))
         local history = EconomyAPI.ListAccountEntries({ accountId = bank.accountId, limit = 10 }, 'feather-economy')
-        assert(history.ok and #history.value >= 3 and history.value[1].reasonCode == 'bank.fee'
+        assert(history.ok and #history.value >= 3 and history.value[1].reasonCode == 'test.fee'
             and history.value[1].amount == -50, 'history did not list the fee first')
         -- Return the test funds: bank 450 -> wallet, then destroy the 1000 - 50 from the wallet.
-        local back = Move(bank, wallet, 450, 'bank.withdraw', 'return')
+        local back = Move(bank, wallet, 450, 'test.withdraw', 'return')
         assert(back.ok, 'return failed: ' .. tostring(back.code))
         local removed = EconomyAPI.Destroy({ accountId = wallet.accountId, currency = 'dollars', amount = 950,
-            reasonCode = 'bank.test_cleanup', idempotencyKey = requestId .. ':cleanup' }, {}, 'feather-economy')
+            reasonCode = 'test.cleanup', idempotencyKey = requestId .. ':cleanup' }, {}, 'feather-economy')
         assert(removed.ok, 'cleanup failed: ' .. tostring(removed.code))
         local walletEnd = EconomyAccounts.Get(wallet.accountId).value.balance
         local bankEnd = EconomyAccounts.Get(bank.accountId).value.balance
@@ -168,5 +263,6 @@ RegisterCommand('EconomyBankLiveTest', function(source, args)
             :format(walletStart, walletEnd, bankStart, bankEnd))
         print(('[EconomyBankLiveTest] PASS deposit/withdraw/fee/replay/overdraw/history verified; wallet=%d bank=%d restored'):format(walletEnd, bankEnd))
     end, debug.traceback)
+    EconomyOperators.Unregister('feather-economy')
     if not called then print('[EconomyBankLiveTest] FAIL ' .. tostring(failure)) end
 end, true)

@@ -182,7 +182,7 @@ function EconomyFoundation.GetCapabilities()
             organizationTreasuries = 1,
             treasurySettlement = 1,
             bankAccounts = 1,
-            bankReserves = 1,
+            operatedTreasuries = 1,
             accountHistory = 1,
             transfers = 1,
             journal = 1,

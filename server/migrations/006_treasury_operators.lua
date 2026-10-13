@@ -1,13 +1,12 @@
 EconomyMigrationDefinitions = EconomyMigrationDefinitions or {}
 
--- Bank reserves. An organization treasury becomes a bank reserve when a trusted
--- bank provisioner binds it; the binding is permanent and names the one resource
--- that may move reserve funds with bank.* reason codes. Other treasuries (shops,
--- governments) can never be drained through bank reasons.
+-- Operated treasuries. An organization treasury is bound, once and permanently,
+-- to the one resource that may move it (EnsureOperatedTreasury). Other
+-- treasuries (shops, governments) can never be moved through operated reasons.
 EconomyMigrationDefinitions[#EconomyMigrationDefinitions + 1] = {
-    id = '006_bank_reserves',
+    id = '006_treasury_operators',
     statements = {
-        [[CREATE TABLE IF NOT EXISTS `economy_bank_reserves` (
+        [[CREATE TABLE IF NOT EXISTS `economy_treasury_operators` (
             `organization_id` CHAR(36) NOT NULL,
             `operator_resource` VARCHAR(100) NOT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
