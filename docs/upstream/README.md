@@ -20,9 +20,9 @@ Notes for every proposal:
   statements. Servers running this fork have already recorded them with
   their checksums, and a renamed or edited migration would stop their
   startup.
-- Upstream `config.lua` should keep only framework resources in the access
-  lists. This fork's entries for its own consumers (bank, society, stables,
-  shops, crafting and housing resources, and `feather-contracts`) are server
-  configuration, not part of any proposal.
+- `config.lua` lists only Feather resources. A server's own consumers go in
+  `config_access.lua`, which ships as a template (proposal 1). The fork's
+  `framework` branch is this clean state; `dev-server` adds this server's
+  consumers to `config_access.lua` only.
 - Server-console tests take a character UUID (or a server id) and run with
   nobody online. Tests that change data exist only with `Config.DevMode`.

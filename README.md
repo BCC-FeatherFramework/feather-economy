@@ -80,8 +80,9 @@ ownership check 0 errors.
    ```
 
 3. Keep `Config.DevMode = false` and `Config.Authorization.enabled = true`.
-4. Add each consumer to the access groups it needs (see Access groups below).
-   Start with none: an unlisted resource can read nothing and move nothing.
+4. Add each consumer to the access groups it needs in `config_access.lua`
+   (see Access groups below). Start with none: an unlisted resource can read
+   nothing and move nothing.
 5. Grant `economy.currency.issue` and `economy.currency.destroy` in the policy
    provider only to resources that must create or destroy currency (for
    example staff money commands, or a bank's one-time balance import). Trust
@@ -195,7 +196,16 @@ return `transaction_not_found`. Capability feature: `transactionRead`.
 
 ## Access groups
 
-`Config.Access` lists resources by name. Grant each consumer only what it uses:
+`Config.Access` lists resources by name. `config.lua` lists only Feather
+resources. Add every other consumer in `config_access.lua`, which loads after
+it, and restart feather-economy:
+
+```lua
+Trust('my-store', { 'trustedReaders', 'trustedProvisioners', 'trustedTransactors' })
+```
+
+A resource cannot trust itself; only these two files decide. Grant each
+consumer only what it uses:
 
 | Group | Allows |
 |---|---|
