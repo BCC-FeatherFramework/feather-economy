@@ -129,9 +129,12 @@ RegisterCommand('EconomyAccountContractSmokeTest', function(source)
             for _ in pairs(distinct) do count = count + 1 end
             return count == 4
         end)() },
-        { 'zero balances', system.ok and (function()
+        -- Supply moves value out of the source and into the sink; nothing moves
+        -- value into the source or out of the sink except a payment reversal.
+        { 'system balance signs', system.ok and (function()
             for _, account in ipairs(system.value) do
-                if account.balance ~= 0 or account.balanceRevision ~= 1 then return false end
+                if account.accountType == 'system_source' and account.balance > 0 then return false end
+                if account.accountType == 'system_sink' and account.balance < 0 then return false end
             end
             return true
         end)() },
