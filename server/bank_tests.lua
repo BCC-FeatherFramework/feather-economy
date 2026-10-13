@@ -200,10 +200,11 @@ end, true)
 if not Config.DevMode then return end
 
 -- Live movement test. Usage: EconomyBankLiveTest <connected source> <fresh requestId>
--- Funds the character's wallet through the supply primitive, deposits, withdraws
--- and charges a fee, replays each call, rejects an overdraw, checks the history,
--- then returns the funds so the character's wallet and bank finish at their
--- original balances. The system source/sink accounts keep the net supply record.
+-- Uses $6.00 of the character's own wallet (creates no currency, so it needs no
+-- policy grant): deposits, replays the deposit, rejects an overdraw, withdraws,
+-- charges a $0.50 fee, checks the history, then returns the rest. The bank account
+-- finishes at its original balance and the wallet $0.50 lower (the fee).
+-- Each run needs a new requestId.
 RegisterCommand('EconomyBankLiveTest', function(source, args)
     if source ~= 0 then return end
     local called, failure = xpcall(function()
@@ -224,6 +225,7 @@ RegisterCommand('EconomyBankLiveTest', function(source, args)
         end
         local wallet, bank = Find(wallets.value, 'dollars'), Find(banks.value, 'dollars')
         local walletStart, bankStart = wallet.balance, bank.balance
+        assert(walletStart >= 600, 'the character needs at least $6.00 in their wallet')
         local sink = EconomyAPI.GetSystemAccount({ currency = 'dollars', accountType = 'system_sink' }, 'feather-economy')
         assert(sink.ok, 'system sink unavailable')
         local registered = EconomyAPI.RegisterOperatedReasons({ reasons = {
@@ -235,14 +237,11 @@ RegisterCommand('EconomyBankLiveTest', function(source, args)
                 currency = 'dollars', amount = amount, reasonCode = reason, idempotencyKey = requestId .. ':' .. key
             }, { actorCharacterId = characterId }, resource or 'feather-economy')
         end
-        local funded = EconomyAPI.Issue({ accountId = wallet.accountId, currency = 'dollars', amount = 1000,
-            reasonCode = 'test.funding', idempotencyKey = requestId .. ':fund' }, {}, 'feather-economy')
-        assert(funded.ok, 'funding failed: ' .. tostring(funded.code))
         local deposit = Move(wallet, bank, 600, 'test.deposit', 'deposit')
         assert(deposit.ok, 'deposit failed: ' .. tostring(deposit.code))
         local replay = Move(wallet, bank, 600, 'test.deposit', 'deposit')
         assert(replay.ok and replay.value.replayed == true and replay.value.transactionId == deposit.value.transactionId, 'deposit replay failed')
-        local overdraw = Move(bank, wallet, 601, 'test.withdraw', 'overdraw')
+        local overdraw = Move(bank, wallet, bankStart + 601, 'test.withdraw', 'overdraw')
         assert(not overdraw.ok and overdraw.code == 'insufficient_funds', 'overdraw was not rejected')
         local withdraw = Move(bank, wallet, 100, 'test.withdraw', 'withdraw')
         assert(withdraw.ok, 'withdraw failed: ' .. tostring(withdraw.code))
@@ -251,17 +250,15 @@ RegisterCommand('EconomyBankLiveTest', function(source, args)
         local history = EconomyAPI.ListAccountEntries({ accountId = bank.accountId, limit = 10 }, 'feather-economy')
         assert(history.ok and #history.value >= 3 and history.value[1].reasonCode == 'test.fee'
             and history.value[1].amount == -50, 'history did not list the fee first')
-        -- Return the test funds: bank 450 -> wallet, then destroy the 1000 - 50 from the wallet.
+        -- Return the rest: 600 - 100 - 50 = 450 back to the wallet.
         local back = Move(bank, wallet, 450, 'test.withdraw', 'return')
         assert(back.ok, 'return failed: ' .. tostring(back.code))
-        local removed = EconomyAPI.Destroy({ accountId = wallet.accountId, currency = 'dollars', amount = 950,
-            reasonCode = 'test.cleanup', idempotencyKey = requestId .. ':cleanup' }, {}, 'feather-economy')
-        assert(removed.ok, 'cleanup failed: ' .. tostring(removed.code))
         local walletEnd = EconomyAccounts.Get(wallet.accountId).value.balance
         local bankEnd = EconomyAccounts.Get(bank.accountId).value.balance
-        assert(walletEnd == walletStart and bankEnd == bankStart, ('balances not restored wallet %d->%d bank %d->%d')
+        assert(walletEnd == walletStart - 50 and bankEnd == bankStart, ('balances wrong: wallet %d->%d bank %d->%d')
             :format(walletStart, walletEnd, bankStart, bankEnd))
-        print(('[EconomyBankLiveTest] PASS deposit/withdraw/fee/replay/overdraw/history verified; wallet=%d bank=%d restored'):format(walletEnd, bankEnd))
+        print(('[EconomyBankLiveTest] PASS deposit/withdraw/fee/replay/overdraw/history verified; bank=%d restored, wallet %d->%d (fee 50)')
+            :format(bankEnd, walletStart, walletEnd))
     end, debug.traceback)
     EconomyOperators.Unregister('feather-economy')
     if not called then print('[EconomyBankLiveTest] FAIL ' .. tostring(failure)) end
