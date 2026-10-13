@@ -78,8 +78,8 @@ function EconomyAPI.EnsureCharacterBankAccounts(request, resource)
 end
 
 -- Account history is private owner history. Besides the privileged readers, a
--- caller sees only accounts it serves: bank resources read bank accounts, and an
--- operator reads the treasury bound to it. Unknown and foreign accounts return
+-- caller sees only accounts it serves: bank transactors read bank accounts, and
+-- an operator reads the treasury bound to it. Unknown and foreign accounts return
 -- the same denial so the answer does not reveal whether an account exists.
 local function CanReadHistory(accountId, resource)
     local account = EconomyAccounts.Get(accountId)
@@ -90,7 +90,7 @@ local function CanReadHistory(accountId, resource)
         return type(bankers) == 'table' and bankers[resource] == true
     end
     if value.accountType == 'treasury' and value.ownerType == 'organization' and type(value.ownerId) == 'string' then
-        return DB.value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?',
+        return DB.value('SELECT `operator_resource` FROM `economy_treasury_operators` WHERE `organization_id`=?',
             value.ownerId:lower()) == resource
     end
     return false
@@ -166,51 +166,10 @@ function EconomyAPI.EnsureOrganizationTreasuries(request, resource)
     return EconomyAccounts.EnsureOrganizationTreasuries(id)
 end
 
--- Binds an active organization's treasuries as the calling bank's reserve. The
--- first bank provisioner to bind an organization owns it permanently; binding a
--- reserve another resource operates is rejected.
-function EconomyAPI.EnsureBankReserve(request, resource)
-    local allowed = Authorize(resource, 'trustedBankProvisioners')
-    if not allowed.ok then return allowed end
-    if EconomyFoundation.GetHealth().state ~= 'ready' then
-        return EconomyResults.Err('not_ready', 'Economy is not ready.')
-    end
-    if type(request) ~= 'table' then
-        return EconomyResults.Err('invalid_input', 'Organization UUID required.')
-    end
-    for key in pairs(request) do
-        if key ~= 'organizationId' then
-            return EconomyResults.Err('invalid_input', 'Unexpected bank reserve field.')
-        end
-    end
-    local id = request.organizationId
-    if type(id) ~= 'string' or not id:match(
-        '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') then
-        return EconomyResults.Err('invalid_input', 'Organization UUID required.')
-    end
-    id = id:lower()
-    local called, organization = pcall(function()
-        return exports['feather-organizations']:GetOrganization({ organizationId = id })
-    end)
-    if not called or type(organization) ~= 'table' or organization.ok ~= true
-        or type(organization.value) ~= 'table' or organization.value.organizationId ~= id then
-        return EconomyResults.Err('dependency_unavailable', 'Organization identity could not be verified.')
-    end
-    if organization.value.status ~= 'active' then
-        return EconomyResults.Err('organization_inactive', 'Active organization required for a bank reserve.')
-    end
-    DB.exec('INSERT IGNORE INTO `economy_bank_reserves` (`organization_id`,`operator_resource`) VALUES (?,?)',
-        id, resource)
-    local operator = DB.value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?', id)
-    if operator ~= resource then
-        return EconomyResults.Err('reserve_operator_conflict', 'That organization is another resource\'s bank reserve.')
-    end
-    return EconomyAccounts.EnsureOrganizationTreasuries(id)
-end
-
--- Binds an active organization's treasuries to
--- the calling resource as an operated treasury (society.* reasons). Uses the
--- bank-reserve binding table: one operator per organization, permanently.
+-- Binds an active organization's treasuries to the calling resource. The first
+-- operator to bind an organization keeps it permanently; only that resource may
+-- then move those treasuries, and only with reason codes it registered
+-- (RegisterOperatedReasons). Binding one another resource operates is rejected.
 function EconomyAPI.EnsureOperatedTreasury(request, resource)
     local allowed = Authorize(resource, 'trustedTreasuryOperators')
     if not allowed.ok then return allowed end
@@ -241,13 +200,19 @@ function EconomyAPI.EnsureOperatedTreasury(request, resource)
     if organization.value.status ~= 'active' then
         return EconomyResults.Err('organization_inactive', 'Active organization required for an operated treasury.')
     end
-    DB.exec('INSERT IGNORE INTO `economy_bank_reserves` (`organization_id`,`operator_resource`) VALUES (?,?)',
+    DB.exec('INSERT IGNORE INTO `economy_treasury_operators` (`organization_id`,`operator_resource`) VALUES (?,?)',
         id, resource)
-    local operator = DB.value('SELECT `operator_resource` FROM `economy_bank_reserves` WHERE `organization_id`=?', id)
+    local operator = DB.value('SELECT `operator_resource` FROM `economy_treasury_operators` WHERE `organization_id`=?', id)
     if operator ~= resource then
-        return EconomyResults.Err('treasury_operator_conflict', 'That organization treasury is operated by another resource.')
+        return EconomyResults.Err('operator_conflict', 'That organization treasury is operated by another resource.')
     end
     return EconomyAccounts.EnsureOrganizationTreasuries(id)
+end
+
+-- Registers the caller's reason codes and the movement shapes each may use,
+-- replacing what it registered before. Operators call this on every start.
+function EconomyAPI.RegisterOperatedReasons(request, resource)
+    return EconomyOperators.Register(resource, request)
 end
 
 function EconomyAPI.Transfer(request, context, resource)
@@ -267,9 +232,7 @@ end
 local function Supply(operation, request, context, resource)
     context = type(context) == 'table' and context or {}
     context.resource = resource
-    local exempt = Config.Authorization.exemptBankSupply == true
-        and EconomyJournal.BankSupplyAllowed(resource, request and request.reasonCode)
-    if Config.Authorization.enabled == true and not exempt then
+    if Config.Authorization.enabled == true then
         local action = operation == 'issue' and Config.Authorization.issueAction
             or Config.Authorization.destroyAction
         local decision = exports['feather-core']:Authorize(action, {
@@ -314,8 +277,8 @@ end)
 exports('EnsureOrganizationTreasuries', function(request)
     return EconomyAPI.EnsureOrganizationTreasuries(request, GetInvokingResource())
 end)
-exports('EnsureBankReserve', function(request)
-    return EconomyAPI.EnsureBankReserve(request, GetInvokingResource())
+exports('RegisterOperatedReasons', function(request)
+    return EconomyAPI.RegisterOperatedReasons(request, GetInvokingResource())
 end)
 exports('EnsureOperatedTreasury', function(request)
     return EconomyAPI.EnsureOperatedTreasury(request, GetInvokingResource())

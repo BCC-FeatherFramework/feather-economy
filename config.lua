@@ -10,19 +10,19 @@ Config = {
             ['feather-admin'] = true
         },
         -- Operated accounts (extension, off by default). See README "Operated accounts".
-        -- May provision character bank accounts and bind organization treasuries as a
-        -- bank reserve operated by the caller. Example: ['bcc-banks'] = true.
+        -- May provision character bank accounts (EnsureCharacterBankAccounts).
+        -- Example: ['bcc-banks'] = true.
         trustedBankProvisioners = {
             ['feather-economy'] = true
         },
-        -- May use the bank.* reason codes against accounts it serves. Also needs
-        -- trustedTransactors.
+        -- May register reason codes whose shapes move character bank accounts.
+        -- Also needs trustedTransactors. Example: ['bcc-banks'] = true.
         trustedBankTransactors = {
             ['feather-economy'] = true
         },
-        -- May bind an organization treasury as an operated treasury and move it only
-        -- with society.* reason codes. Also needs trustedTransactors.
-        -- Example: ['bcc-society'] = true.
+        -- May bind organization treasuries (EnsureOperatedTreasury) and register
+        -- reason codes whose shapes move them. Also needs trustedTransactors.
+        -- Example: ['bcc-society'] = true, ['bcc-banks'] = true.
         trustedTreasuryOperators = {},
         -- May read the journal history of any account (ListAccountEntries). Other
         -- trusted readers see only accounts they serve.
@@ -55,15 +55,13 @@ Config = {
             ['feather-admin'] = true
         }
     },
-    -- Reason codes under which a bank resource may create or destroy currency, per
-    -- resource, exact match only. Empty: no bank supply. Supply still needs a Core
-    -- policy grant (economy.currency.issue) for the calling resource.
+    -- Reason codes an operator may create currency with (issue_to_bank and
+    -- issue_to_operated shapes), per resource, exact match only. Empty: no operator
+    -- supply. Each issue still needs a Core policy grant (economy.currency.issue).
     -- Example: ['bcc-banks'] = { ['bank.migration.import'] = true, ['bank.reserve.funding'] = true }
-    BankSupply = {},
+    OperatorSupply = {},
     Authorization = {
         enabled = true,
-        -- Keep false: bank supply also goes through the Core policy check.
-        exemptBankSupply = false,
         issueAction = 'economy.currency.issue',
         destroyAction = 'economy.currency.destroy'
     },

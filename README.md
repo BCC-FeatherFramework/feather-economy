@@ -184,42 +184,67 @@ across server restart is still pending; no production-readiness claim is implied
 This extension is a proposal against master plan §5.2 and §13 (bank accounts,
 general treasury spending, payroll and Society management are deferred there).
 With the shipped configuration every new access list is empty or holds only
-`feather-economy`, `BankSupply` is empty, and Economy behaves exactly as described
-above: treasuries accept only `shop.purchase` settlement and no resource can
-create currency in a bank account.
+`feather-economy`, `OperatorSupply` is empty, and Economy behaves exactly as
+described above: treasuries accept only `shop.purchase` settlement and no resource
+can create currency in a bank account.
 
-When a server enables it, an account can be **bound to one operating resource**,
-and only that resource may move it, only with a closed set of reason codes:
+When a server enables it, an organization treasury can be **bound to one operating
+resource**, and only that resource may move it. Economy does not know any
+consumer's reason codes: each operator registers its own codes on start and maps
+each to one or more fixed **movement shapes**. A movement is allowed only when the
+reason is registered by the caller and the accounts match one of its shapes.
 
-| Export | Access group | Binds / creates |
+| Export | Access group | Effect |
 |---|---|---|
 | `EnsureCharacterBankAccounts({ characterId, accountRef })` | `trustedBankProvisioners` | One `bank` account per currency for a character, per stable `accountRef` |
-| `EnsureBankReserve({ organizationId })` | `trustedBankProvisioners` | The organization's treasuries as a bank reserve operated by the caller (permanent) |
-| `EnsureOperatedTreasury({ organizationId })` | `trustedTreasuryOperators` | The organization's treasuries as an operated treasury of the caller (permanent) |
-| `ListAccountEntries({ accountId, limit, offset })` | `trustedReaders` | Journal history: privileged readers any account; others only accounts they serve |
+| `EnsureOperatedTreasury({ organizationId })` | `trustedTreasuryOperators` | Binds an active organization's treasuries to the caller, permanently (`operator_conflict` if another resource holds it) |
+| `RegisterOperatedReasons({ reasons = { [code] = shape or { shapes } } })` | `trustedTreasuryOperators` or `trustedBankTransactors` | Replaces the caller's reason codes. A code belongs to one resource at a time (`reason_conflict`) and is released when that resource stops; `shop.` and `economy.` are reserved |
+| `ListAccountEntries({ accountId, limit, offset })` | `trustedReaders` | Journal history: privileged readers any account; others only bank accounts (bank transactors) or a treasury bound to them |
 
-Reason codes (all exact; anything else is rejected):
+Shapes ("operated" is a treasury bound to the caller; "actor wallet" is the wallet
+of `context.actorCharacterId`):
 
-- `bank.deposit`, `bank.withdraw`: the acting character's own wallet and a character bank account.
-- `bank.transfer`: bank account to bank account; `bank.fee`: bank account to the system sink.
-- `bank.loan.*`, `bank.check.*`, `bank.box.*`, `bank.gold.exchange`, `bank.compensation`:
-  between character funds and the caller's own bank reserve.
-- `society.deposit`, `society.bill`: the acting character's wallet into the caller's operated treasury.
-- `society.withdraw`: the operated treasury into the acting character's wallet.
-- `society.payroll`, `society.refund`: the operated treasury into a character wallet.
-- `society.tax`: the operated treasury into the system sink.
+| Shape | From | To | Caller needs |
+|---|---|---|---|
+| `actor_wallet_to_operated` | actor wallet | operated treasury | `trustedTreasuryOperators` |
+| `operated_to_actor_wallet` | operated treasury | actor wallet | `trustedTreasuryOperators` |
+| `operated_to_wallet` | operated treasury | any character wallet | `trustedTreasuryOperators` |
+| `operated_to_sink` | operated treasury | system sink | `trustedTreasuryOperators` |
+| `bank_to_operated` | character bank account | operated treasury | both groups |
+| `operated_to_bank` | operated treasury | character bank account | both groups |
+| `actor_wallet_to_bank` | actor wallet | character bank account | `trustedBankTransactors` |
+| `bank_to_actor_wallet` | character bank account | actor wallet | `trustedBankTransactors` |
+| `bank_to_bank` | character bank account | character bank account | `trustedBankTransactors` |
+| `bank_to_sink` | character bank account | system sink | `trustedBankTransactors` |
+| `issue_to_bank` (supply) | system source | character bank account | `trustedBankTransactors` |
+| `issue_to_operated` (supply) | system source | operated treasury | `trustedTreasuryOperators` |
 
-Supply stays policy-gated: a bank resource may issue only reason codes listed for it
-in `Config.BankSupply`, and each issue still needs a Core policy decision for the
-caller (`subject.resource`), for example
+Whether the acting character may act (account access, society rank) stays the
+operator's rule; Economy enforces binding, ownership and shape.
+
+Supply stays policy-gated: a supply shape creates currency only while the code is
+listed for the caller in `Config.OperatorSupply`, and each issue still needs a Core
+policy decision for the caller (`subject.resource`), for example
 `Config.servicePolicy['feather-economy']['bcc-banks']['economy.currency.issue']` in
-feather-admin. `Authorization.exemptBankSupply` stays `false`.
+feather-admin. No shape destroys currency.
 
-Migrations 005 (bank account type and `account_ref`) and 006 (`economy_bank_reserves`
-binding table, shared by bank reserves and operated treasuries) are additive and keep
-existing rows unchanged.
+Example registration (bcc-society):
 
-Read-only checks: `EconomyBankAccountGateSmokeTest`, `EconomyBankContractSmokeTest`.
-Named consumers: bcc-banks (bank accounts, reserves) and bcc-society (operated
-treasuries; deposit, withdraw, bills, payroll and taxes passed live with two players
-on 2026-10-11).
+```lua
+exports['feather-economy']:RegisterOperatedReasons({ reasons = {
+    ['society.deposit'] = 'actor_wallet_to_operated',
+    ['society.bill'] = 'actor_wallet_to_operated',
+    ['society.withdraw'] = 'operated_to_actor_wallet',
+    ['society.payroll'] = 'operated_to_wallet',
+    ['society.tax'] = 'operated_to_sink'
+} })
+```
+
+Migrations 005 (bank account type and `account_ref`) and 006
+(`economy_treasury_operators` binding table) are additive and keep existing rows
+unchanged.
+
+Read-only checks: `EconomyBankAccountGateSmokeTest` (test-only operators, no
+database writes), `EconomyBankContractSmokeTest`. Named consumers: bcc-banks (bank
+accounts, branch reserves) and bcc-society (deposit, withdraw, bills, payroll and
+taxes passed live with two players on 2026-10-11).
