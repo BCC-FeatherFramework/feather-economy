@@ -141,7 +141,8 @@ RegisterCommand('EconomyReleaseGateSmokeTest', function(source)
             for _, operation in ipairs({ 'issue', 'destroy' }) do
                 local result = Attempt(operation, authorize, nil, suffix)
                 if result.ok or result.code ~= 'authorization_denied'
-                    or (policyCode and result.details.policyCode ~= policyCode) then
+                    or (policyCode and (type(result.details) ~= 'table'
+                        or result.details.policyCode ~= policyCode)) then
                     return false
                 end
             end
