@@ -5,6 +5,16 @@ Config = {
     -- Development servers only; keep false for production.
     DevMode = false,
     SystemOwnerId = '00000000-0000-0000-0000-000000000001',
+    -- Resources allowed to call each group of exports (README "Access groups").
+    -- Besides the Feather resources, this server trusts its ported consumers:
+    --   bcc-banks    bank accounts, statements, branch reserves (operated treasuries)
+    --   bcc-society  business treasuries: deposits, withdrawals, payroll, bills, tax
+    --   bcc-stables  horse and tack purchases; sales pay out with Issue (see trustedSuppliers)
+    --   bcc-shops    store purchases paid into the system sink
+    --   bcc-craft    crafting book purchases paid into the system sink
+    --   bcc-housing  house purchases, rent, tax; sale back to the agent creates money
+    -- Every one of them needs its wallets (trustedProvisioners) and reads accounts
+    -- (trustedReaders) to pay; only the groups noted below grant more.
     Access = {
         trustedTreasuryProvisioners = {
             ['feather-economy'] = true,
@@ -15,20 +25,20 @@ Config = {
         -- bank accounts (EnsureCharacterBankAccounts).
         trustedBankProvisioners = {
             ['feather-economy'] = true,
-            ['bcc-banks'] = true,
+            ['bcc-banks'] = true,    -- one account per character and branch
             ['feather-admin'] = true
         },
         -- May register reason codes whose shapes move character bank accounts.
         -- They must also be in trustedTransactors.
         trustedBankTransactors = {
             ['feather-economy'] = true,
-            ['bcc-banks'] = true
+            ['bcc-banks'] = true     -- deposits, withdrawals, transfers, fees, loans, checks
         },
         -- May bind organization treasuries (EnsureOperatedTreasury) and register
         -- reason codes whose shapes move them. They must also be in trustedTransactors.
         trustedTreasuryOperators = {
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true
+            ['bcc-banks'] = true,    -- the reserve treasury of each branch
+            ['bcc-society'] = true   -- the treasury of each business
         },
         -- May read the journal history of any account (ListAccountEntries). Other
         -- trusted readers see only accounts they serve: bank transactors read bank
@@ -39,7 +49,7 @@ Config = {
         },
         trustedReaders = {
             ['feather-economy'] = true,
-            ['feather-contracts'] = true,
+            ['feather-contracts'] = true, -- reconciles settlements with GetTransaction
             ['feather-admin'] = true,
             ['feather-hud'] = true,
             ['feather-shops'] = true,
@@ -64,7 +74,7 @@ Config = {
         },
         trustedTransactors = {
             ['feather-economy'] = true,
-            ['feather-contracts'] = true,
+            ['feather-contracts'] = true, -- settles obligations such as rent and tax
             ['feather-shops'] = true,
             ['bcc-banks'] = true,
             ['bcc-society'] = true,
@@ -80,7 +90,12 @@ Config = {
         trustedSuppliers = {
             ['feather-economy'] = true,
             ['feather-admin'] = true,
+            -- Sale back to the housing agent and furniture sell-back. Also needs the
+            -- economy.currency.issue grant in the policy provider.
             ['bcc-housing'] = true
+            -- bcc-stables is not listed: its horse sales (StablesEconomy.Payout) issue
+            -- currency and are refused until it is added here and granted
+            -- economy.currency.issue.
         }
     },
     -- Reason codes an operator may create currency with (issue_to_bank and
