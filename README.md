@@ -362,11 +362,15 @@ stopped dependents. Switch DevMode off and restart before packaging.
 ### Ownership check (no other balance writers)
 
 Only feather-economy may write its tables, and no resource may keep or change
-balances on its own. From the server folder (Node.js, no dependencies):
+balances on its own. Run it from the server folder, the one that holds
+`server.cfg` (Node.js, no dependencies):
 
 ```text
 node "resources/[feather]/feather-economy/tools/ownership-check.js" resources --cfg server.cfg
 ```
+
+From inside `resources`, use
+`node "[feather]/feather-economy/tools/ownership-check.js" . --cfg ../server.cfg`.
 
 `--cfg` limits the scan to resources server.cfg ensures or starts; leave it out
 to scan everything. Errors (exit code 1): SQL that writes an `economy_*` table,
