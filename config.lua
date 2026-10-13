@@ -13,8 +13,7 @@ Config = {
     --   bcc-shops    store purchases paid into the system sink
     --   bcc-craft    crafting book purchases paid into the system sink
     --   bcc-housing  house purchases, rent, tax; sale back to the agent creates money
-    -- Every one of them needs its wallets (trustedProvisioners) and reads accounts
-    -- (trustedReaders) to pay; only the groups noted below grant more.
+    -- Each bcc entry below says what the resource uses that group for.
     Access = {
         trustedTreasuryProvisioners = {
             ['feather-economy'] = true,
@@ -53,35 +52,35 @@ Config = {
             ['feather-admin'] = true,
             ['feather-hud'] = true,
             ['feather-shops'] = true,
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true,
-            ['bcc-stables'] = true,
-            ['bcc-shops'] = true,
-            ['bcc-craft'] = true,
-            ['bcc-housing'] = true
+            ['bcc-banks'] = true,       -- balances and statements of bank accounts and reserves
+            ['bcc-society'] = true,     -- treasury balance; the system sink for fees
+            ['bcc-stables'] = true,     -- the system sink that purchases pay into
+            ['bcc-shops'] = true,       -- the system sink that purchases pay into
+            ['bcc-craft'] = true,       -- the system sink that book purchases pay into
+            ['bcc-housing'] = true      -- wallet balance before a purchase; the system sink
         },
         trustedProvisioners = {
             ['feather-economy'] = true,
             ['feather-character'] = true,
             ['feather-shops'] = true,
             ['feather-admin'] = true,
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true,
-            ['bcc-stables'] = true,
-            ['bcc-shops'] = true,
-            ['bcc-craft'] = true,
-            ['bcc-housing'] = true
+            ['bcc-banks'] = true,       -- the character's wallet for deposits and withdrawals
+            ['bcc-society'] = true,     -- member wallets for deposits, withdrawals and wages
+            ['bcc-stables'] = true,     -- the buyer's or seller's wallet
+            ['bcc-shops'] = true,       -- the buyer's wallet
+            ['bcc-craft'] = true,       -- the buyer's wallet
+            ['bcc-housing'] = true      -- the buyer's or tenant's wallet
         },
         trustedTransactors = {
             ['feather-economy'] = true,
             ['feather-contracts'] = true, -- settles obligations such as rent and tax
             ['feather-shops'] = true,
-            ['bcc-banks'] = true,
-            ['bcc-society'] = true,
-            ['bcc-stables'] = true,
-            ['bcc-shops'] = true,
-            ['bcc-craft'] = true,
-            ['bcc-housing'] = true
+            ['bcc-banks'] = true,       -- bank.* reasons it registers (RegisterOperatedReasons)
+            ['bcc-society'] = true,     -- society.* reasons it registers (RegisterOperatedReasons)
+            ['bcc-stables'] = true,     -- horse, tack and taming purchases into the system sink
+            ['bcc-shops'] = true,       -- store purchases into the system sink
+            ['bcc-craft'] = true,       -- crafting book purchases into the system sink
+            ['bcc-housing'] = true      -- house purchases, rent and tax
         },
         trustedReversers = {
             ['feather-economy'] = true,
