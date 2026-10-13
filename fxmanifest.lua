@@ -13,7 +13,6 @@ shared_script 'shared/results.lua'
 server_scripts {
     '@feather-mysql/lib/DB.lua',
     'config.lua',
-    'config_access.lua',
     'server/logging.lua',
     'server/migrations/001_economy_foundation.lua',
     'server/migrations/002_economy_accounts.lua',
