@@ -20,9 +20,19 @@ function EconomyTests.RequestId(value)
         and value:match('^[A-Za-z0-9][A-Za-z0-9._:%-]*$') ~= nil
 end
 
--- Returns characterId, source (nil for a UUID), or nil and the reason.
+-- Returns characterId, source (nil for a UUID), or nil and the reason. Economy
+-- cannot look characters up, so a UUID must already own Economy accounts:
+-- Character provisions wallets when a character is first activated. This keeps
+-- a mistyped or foreign UUID from getting wallets.
 function EconomyTests.Character(argument)
-    if EconomyTests.IsUuid(argument) then return argument:lower(), nil end
+    if EconomyTests.IsUuid(argument) then
+        local characterId = argument:lower()
+        local accounts = EconomyAccounts.FindByOwner('character', characterId)
+        if not accounts.ok or #accounts.value == 0 then
+            return nil, 'no Economy accounts for that UUID; pass a character that has been played'
+        end
+        return characterId, nil
+    end
     local source = tonumber(argument)
     if not source or source < 1 or source % 1 ~= 0 then
         return nil, 'expected a character UUID or a server id'

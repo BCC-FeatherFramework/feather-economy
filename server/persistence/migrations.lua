@@ -62,9 +62,18 @@ local function Validate(definitions)
     return EconomyResults.Ok(true)
 end
 
+-- feather-mysql passes the database's own message (`detail`) only with the
+-- convar feather_mysql_error_detail; its driverCode is the MySQL name for the
+-- error number, which can differ on MariaDB.
 local function Reason(failure)
     if type(failure) == 'table' then
-        return tostring(failure.message), failure.driverCode, failure.sqlState
+        local reason = tostring(failure.message)
+        if type(failure.detail) == 'string' then
+            reason = reason .. ': ' .. failure.detail
+        elseif failure.code == 'DATABASE_ERROR' then
+            reason = reason .. ' (set feather_mysql_error_detail true to include the database message)'
+        end
+        return reason, failure.driverCode, failure.sqlState
     end
     return tostring(failure):match('^[^\n]*'), nil, nil
 end

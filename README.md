@@ -31,22 +31,24 @@ Recorded on the development server:
 - HUD wallet reads and Character wallet provisioning.
 - Ownership check: 0 errors over every resource the server starts.
 
-### Added for release, results pending
+Release gates, passed on the development server (DevMode) on 2026-10-13:
 
-These cover the remaining release gates and have not been run yet:
-
-- `EconomyReleaseGateSmokeTest` (read-only): migration rerun and checksums,
-  checksum mismatch, history limits, offsets and ordering, journal integrity,
-  outbox backlog, and supply policy failing closed.
-- `EconomyMigrationFaultTest`, `EconomyHistoryPaginationTest` and
-  `EconomyRestartTest` (DevMode), plus the `economy_dev_migration_fault`
-  startup switch.
-- Migration 007 (history ordering), a migration runner that leaves nothing
-  half applied, and a supply gate that also denies when the Core call fails.
+- `EconomyReleaseGateSmokeTest` 23/23 (read-only): migration rerun and
+  checksums, checksum mismatch, history limits, offsets and ordering, journal
+  integrity, outbox backlog, and supply policy failing closed (the live Core
+  policy answered `service_forbidden`).
+- `EconomyMigrationFaultTest` 8/8: invalid shape, checksum mismatch and a
+  failing migration apply nothing; a pending migration applies once.
+- `EconomyHistoryPaginationTest` 10/10.
+- `EconomyRestartTest` 10/10 across a full server restart: balance, journal,
+  pending outbox events delivered, idempotent replay, payload conflict.
+- Startup with a failing migration: `state=failed`, `migration_failed` naming
+  the migration and statement, nothing kept; dependents fail to start.
+- Migration 007 applied on an existing install.
 
 ### Open
 
-- Run the tests above and record the results.
+- Repeat the read-only tests in the production profile (DevMode off).
 - Admin money commands target only connected characters; offline correction
   and Admin Economy screens are not available yet.
 - Not implemented: account closure, holds, credit, `GetBalance`,
@@ -298,8 +300,8 @@ Migrations live in `server/migrations/` and run in id order at startup.
 
 Run these from the server console. None needs a player online. Where a test
 takes a character, pass the character's UUID (or the server id of a connected
-player). Use the UUID of an existing character: wallets are provisioned for
-whatever UUID is given.
+player). A UUID must already own Economy accounts (Character provisions
+wallets on first activation), so a mistyped or foreign UUID is refused.
 
 ### Production profile (read-only)
 

@@ -7,8 +7,8 @@ numbers refer to the plan as of its 2026-09-18 checkpoint.
 ## Header
 
 - **Last revised:** 2026-10-13
-- **Status:** Contract 1 implemented through E6. Release gates have tests;
-  results pending.
+- **Status:** Contract 1 implemented through E6. Release gates passed on the
+  development server on 2026-10-13; the production-profile rerun is pending.
 
 ## Section 2.1, Admin row
 
@@ -70,13 +70,13 @@ Add the test that covers each gate:
 
 | Gate | Test | Status |
 |---|---|---|
-| Clean install, rerun, checksum mismatch, migration failure | `EconomyReleaseGateSmokeTest`, `EconomyMigrationFaultTest`, the `economy_dev_migration_fault` startup switch | pending run |
+| Clean install, rerun, checksum mismatch, migration failure | `EconomyReleaseGateSmokeTest`, `EconomyMigrationFaultTest`, the `economy_dev_migration_fault` startup switch | passed (23/23, 8/8, startup failed closed) |
 | Integer minor units; balanced transactions | `EconomyJournalAuditSmokeTest`; "balances equal their entries" | passed 5/5 |
 | Concurrent spending; failure injection | `EconomyConcurrencyTest` | passed |
-| Exact retry; mismatched payload | `EconomySupplyTest`, `EconomyRestartTest` | passed; after restart pending |
-| Restart preserves balances, journal, outbox, replay | `EconomyRestartTest prepare/verify` | pending run |
-| Unauthorized supply and policy-provider failure | `EconomyReleaseGateSmokeTest` (missing, denying, failing, invalid provider; untrusted supplier; Core) | pending run |
-| Bounded reads; history paging and ordering | `EconomyReleaseGateSmokeTest`, `EconomyHistoryPaginationTest`, `EconomyBankContractSmokeTest` | pending run |
+| Exact retry; mismatched payload | `EconomySupplyTest`, `EconomyRestartTest` | passed, also after restart |
+| Restart preserves balances, journal, outbox, replay | `EconomyRestartTest prepare/verify` | passed 10/10 |
+| Unauthorized supply and policy-provider failure | `EconomyReleaseGateSmokeTest` (missing, denying, failing, invalid provider; untrusted supplier; Core) | passed |
+| Bounded reads; history paging and ordering | `EconomyReleaseGateSmokeTest`, `EconomyHistoryPaginationTest`, `EconomyBankContractSmokeTest` | passed (bank contract: rerun in production profile) |
 | No first-party writer of Economy tables | `tools/ownership-check.js` | passed |
 | Shops payment, fulfillment, restart, reconciliation | Shops live tests | passed |
 
@@ -89,7 +89,7 @@ resource's business logic, built on these shapes.
 
 ## Section 14, remaining work
 
-1. Run the pending release gates above and record the results.
+1. Rerun the read-only release tests with DevMode off and record them.
 2. Admin: accept a character UUID for offline wallet corrections. Record the
    staff character, not the target, as `actorCharacterId`. Remove or wire the
    legacy client Economy screens. Add Economy grants to Admin's release smoke
@@ -111,5 +111,7 @@ leaves nothing half applied. Supply denies when the Core policy call raises.
 
 Release gate tests were added for migrations, paging, restart and policy
 failure. All console tests take character UUIDs and run with nobody online.
-DevMode is off and supply policy is on. Results are pending a run on the
-development server.
+DevMode is off and supply policy is on. On the development server the release
+gate passed 23/23, migration faults 8/8, pagination 10/10 and restart 10/10
+across a full server restart; a failing migration stopped startup with an
+actionable error and kept nothing.
