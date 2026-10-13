@@ -148,9 +148,11 @@ function EconomyAccounts.EnsureCharacterBankAccounts(characterId, accountRef)
     return Ensure('character', characterId, { 'bank' }, accountRef)
 end
 
--- Newest-first journal entries for one account. Each row names the account on
--- the other side of the movement so a consumer can render a statement without
--- reading the journal tables itself.
+-- Newest-first journal entries for one account, in posting order (entry
+-- sequence, migration 007). Each row names the account on the other side of the
+-- movement so a consumer can render a statement without reading the journal
+-- tables itself. Offsets count from the newest entry, so entries posted between
+-- two page reads shift later pages; `sequence` lets a consumer drop repeats.
 function EconomyAccounts.ListEntries(accountId, limit, offset)
     if not IsUuid(accountId) then
         return EconomyResults.Err('invalid_input', 'accountId must be a UUID.')
@@ -163,7 +165,7 @@ function EconomyAccounts.ListEntries(accountId, limit, offset)
         return EconomyResults.Err('invalid_input', 'limit or offset is out of range.')
     end
     local rows = DB.query([[
-        SELECT e.`entry_id`,e.`transaction_id`,e.`amount`,e.`resulting_balance`,
+        SELECT e.`entry_id`,e.`entry_sequence`,e.`transaction_id`,e.`amount`,e.`resulting_balance`,
                t.`operation_type`,t.`currency_code`,t.`reason_code`,t.`reference_type`,
                t.`reference_id`,t.`source_resource`,t.`posted_at`,
                c.`account_id` AS `counterparty_account_id`
@@ -172,13 +174,14 @@ function EconomyAccounts.ListEntries(accountId, limit, offset)
         LEFT JOIN `economy_entries` c
                ON c.`transaction_id`=e.`transaction_id` AND c.`account_id`<>e.`account_id`
         WHERE e.`account_id`=? AND t.`status`='committed'
-        ORDER BY t.`posted_at` DESC,e.`created_at` DESC,e.`entry_id`
+        ORDER BY t.`posted_at` DESC,e.`entry_sequence` DESC
         LIMIT ? OFFSET ?
     ]], accountId, limit, offset) or {}
     local entries = {}
     for _, row in ipairs(rows) do
         entries[#entries + 1] = {
             entryId = row.entry_id,
+            sequence = tonumber(row.entry_sequence),
             transactionId = row.transaction_id,
             operation = row.operation_type,
             currency = row.currency_code,

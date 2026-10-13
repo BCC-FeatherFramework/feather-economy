@@ -20,6 +20,7 @@ server_scripts {
     'server/migrations/004_organization_treasuries.lua',
     'server/migrations/005_character_bank_accounts.lua',
     'server/migrations/006_treasury_operators.lua',
+    'server/migrations/007_entry_sequence.lua',
     'server/persistence/migrations.lua',
     'server/repositories/currencies.lua',
     'server/repositories/accounts.lua',
