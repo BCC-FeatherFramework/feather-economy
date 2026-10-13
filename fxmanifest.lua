@@ -31,7 +31,8 @@ server_scripts {
     'server/main.lua',
     'server/shop_tests.lua',
     'server/treasury_tests.lua',
-    'server/bank_tests.lua'
+    'server/bank_tests.lua',
+    'server/transaction_tests.lua'
 }
 
 dependencies {

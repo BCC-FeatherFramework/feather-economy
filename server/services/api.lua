@@ -114,6 +114,30 @@ function EconomyAPI.ListAccountEntries(request, resource)
     return EconomyAccounts.ListEntries(request.accountId, request.limit, request.offset)
 end
 
+-- A transaction is readable by the resource that posted it and by privileged
+-- history readers. Unknown and foreign transactions return the same not-found
+-- answer so the reply does not reveal whether a transaction exists.
+function EconomyAPI.GetTransaction(request, resource)
+    local allowed = Authorize(resource, 'trustedReaders')
+    if not allowed.ok then return allowed end
+    if type(request) ~= 'table' or type(request.transactionId) ~= 'string' or not request.transactionId:match(
+        '^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') then
+        return EconomyResults.Err('invalid_input', 'transactionId must be a UUID.')
+    end
+    for key in pairs(request) do
+        if key ~= 'transactionId' then
+            return EconomyResults.Err('invalid_input', 'Unexpected transaction lookup field.')
+        end
+    end
+    local transaction = EconomyJournal.GetTransaction(request.transactionId)
+    local privileged = Config.Access.privilegedHistoryReaders
+    if not transaction or (transaction.sourceResource ~= resource
+        and not (type(privileged) == 'table' and privileged[resource] == true)) then
+        return EconomyResults.Err('transaction_not_found', 'Economy transaction was not found.')
+    end
+    return EconomyResults.Ok(transaction)
+end
+
 function EconomyAPI.GetSystemAccount(request, resource)
     local allowed = Authorize(resource, 'trustedReaders')
     if not allowed.ok then return allowed end
@@ -288,6 +312,9 @@ exports('EnsureCharacterBankAccounts', function(request)
 end)
 exports('ListAccountEntries', function(request)
     return EconomyAPI.ListAccountEntries(request, GetInvokingResource())
+end)
+exports('GetTransaction', function(request)
+    return EconomyAPI.GetTransaction(request, GetInvokingResource())
 end)
 exports('GetSystemAccount', function(request)
     return EconomyAPI.GetSystemAccount(request, GetInvokingResource())

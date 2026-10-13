@@ -284,5 +284,39 @@ local function Supply(operation, request, context)
     return Post(operation, post, context)
 end
 
+-- One journal transaction with its entries, for reconciliation by the resource
+-- that posted it. Returns nil when the transaction does not exist.
+function EconomyJournal.GetTransaction(transactionId)
+    if not IsUuid(transactionId) then return nil end
+    local row = DB.one([[
+        SELECT `transaction_id`,`operation_type`,`status`,`currency_code`,`reason_code`,`reference_type`,
+               `reference_id`,`source_resource`,`correlation_id`,`created_at`,`posted_at`
+        FROM `economy_transactions` WHERE `transaction_id`=? LIMIT 1
+    ]], transactionId:lower())
+    if not row then return nil end
+    local entries, amount = {}, 0
+    for _, entry in ipairs(DB.query([[SELECT `account_id`,`amount` FROM `economy_entries`
+        WHERE `transaction_id`=? ORDER BY `amount`,`account_id`]], row.transaction_id) or {}) do
+        local value = tonumber(entry.amount)
+        entries[#entries + 1] = { accountId = entry.account_id, amount = value }
+        if value > 0 then amount = amount + value end
+    end
+    return {
+        transactionId = row.transaction_id,
+        operation = row.operation_type,
+        status = row.status,
+        currency = row.currency_code,
+        amount = amount,
+        reasonCode = row.reason_code,
+        referenceType = row.reference_type,
+        referenceId = row.reference_id,
+        sourceResource = row.source_resource,
+        correlationId = row.correlation_id,
+        createdAt = row.created_at,
+        postedAt = row.posted_at,
+        entries = entries
+    }
+end
+
 function EconomyJournal.Issue(request, context) return Supply('issue', request, context) end
 function EconomyJournal.Destroy(request, context) return Supply('destroy', request, context) end

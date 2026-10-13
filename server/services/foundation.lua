@@ -184,6 +184,7 @@ function EconomyFoundation.GetCapabilities()
             bankAccounts = 1,
             operatedTreasuries = 1,
             accountHistory = 1,
+            transactionRead = 1,
             transfers = 1,
             journal = 1,
             idempotency = 1,

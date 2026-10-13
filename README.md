@@ -74,6 +74,15 @@ Account exports are server-only and restricted by `Config.Access`. Consumers
 should use the named `GetAccount`, `FindAccountsByOwner`, and
 `EnsureCharacterWallets` exports so Cfx can derive the invoking resource.
 
+`GetTransaction({ transactionId })` returns one journal transaction for
+reconciliation: `operation`, `status`, `currency`, `amount` (the total moved),
+`reasonCode`, `referenceType`, `referenceId`, `sourceResource`,
+`correlationId`, `createdAt`, `postedAt` and `entries` (`accountId`, signed
+`amount`). The caller must be a trusted reader, and it may read only
+transactions it posted unless it is a privileged history reader. Unknown and
+foreign transactions both return `transaction_not_found`. Advertised as
+capability feature `transactionRead`.
+
 All operations use Core's flat result envelope:
 
 ```lua
