@@ -125,6 +125,23 @@ funds from both wallets so both finish at their original balances.
 The concurrency test injects a rollback after balance writes, then races two
 75.00 spends against 100.00. Exactly one may commit; the other must fail for
 insufficient funds before both wallets are restored.
+
+### Ownership check (no other balance writers)
+
+Only feather-economy may write its tables, and no resource may keep or change
+balances on its own. From the server folder (Node.js, no dependencies):
+
+```text
+node "resources/[feather]/feather-economy/tools/ownership-check.js" resources --cfg server.cfg
+```
+
+`--cfg` limits the scan to resources server.cfg ensures or starts; leave it out to
+scan everything. Errors (exit code 1): SQL that writes an `economy_*` table,
+`UPDATE ... SET` of a money column (`money`, `gold`, `rol`, `cash`, `balance`,
+`ledger`), and VORP or Cfx example currency calls (`addCurrency`, `removeMoney`,
+`exports.money`, ...). Direct reads of `economy_*` tables are warnings, errors with
+`--strict`. `--allow <resource>` skips a resource being retired. The expected
+result is `0 error(s) -> PASS`.
 # Payment reversal prerequisite
 
 The dev-only server-console funding command also accepts optional currency and
