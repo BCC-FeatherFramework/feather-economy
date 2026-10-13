@@ -253,23 +253,43 @@ function EconomyAPI.ReversePayment(request, context, resource)
     return EconomyJournal.ReversePayment(request, context)
 end
 
-local function Supply(operation, request, context, resource)
+local function CoreAuthorize(action, request)
+    return exports['feather-core']:Authorize(action, request)
+end
+
+-- Issue and Destroy need an explicit Core policy allow while
+-- Config.Authorization.enabled is true. No provider, a denial, an invalid
+-- decision, or an error raised by the call all deny. `authorize` defaults to
+-- Core; EconomyReleaseGateSmokeTest passes stand-ins for each failure mode.
+function EconomyAPI.Supply(operation, request, context, resource, authorize)
     context = type(context) == 'table' and context or {}
     context.resource = resource
     if Config.Authorization.enabled == true then
         local action = operation == 'issue' and Config.Authorization.issueAction
             or Config.Authorization.destroyAction
-        local decision = exports['feather-core']:Authorize(action, {
+        local subject = type(request) == 'table' and request or {}
+        local called, decision = pcall(authorize or CoreAuthorize, action, {
             source = context.actorSource,
             correlationId = context.correlationId,
             -- resource lets the policy provider match a service grant for the caller.
-            subject = { resource = resource, operation = operation, accountId = request and request.accountId,
-                currency = request and request.currency, amount = request and request.amount }
+            subject = { resource = resource, operation = operation, accountId = subject.accountId,
+                currency = subject.currency, amount = subject.amount }
         })
-        if type(decision) ~= 'table' or not decision.ok
+        if not called or type(decision) ~= 'table' or decision.ok ~= true
             or type(decision.value) ~= 'table' or decision.value.allowed ~= true then
+            local policyCode = 'invalid_decision'
+            if not called then
+                policyCode = 'policy_error'
+            elseif type(decision) == 'table' and decision.ok == false then
+                policyCode = decision.code or 'policy_error'
+            elseif type(decision) == 'table' and type(decision.value) == 'table'
+                and decision.value.allowed == false then
+                policyCode = decision.value.code or 'denied'
+            end
             return EconomyResults.Err('authorization_denied',
-                'Currency supply operation is not authorized.')
+                'Currency supply operation is not authorized.', {
+                    action = action, policyCode = tostring(policyCode)
+                })
         end
     end
     return operation == 'issue' and EconomyJournal.Issue(request, context)
@@ -277,11 +297,11 @@ local function Supply(operation, request, context, resource)
 end
 
 function EconomyAPI.Issue(request, context, resource)
-    return Supply('issue', request, context, resource)
+    return EconomyAPI.Supply('issue', request, context, resource)
 end
 
 function EconomyAPI.Destroy(request, context, resource)
-    return Supply('destroy', request, context, resource)
+    return EconomyAPI.Supply('destroy', request, context, resource)
 end
 
 exports('GetCapabilities', EconomyAPI.GetCapabilities)
