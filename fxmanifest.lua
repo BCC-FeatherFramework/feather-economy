@@ -29,11 +29,13 @@ server_scripts {
     'server/services/outbox.lua',
     'server/services/foundation.lua',
     'server/services/api.lua',
+    'server/test_support.lua',
     'server/main.lua',
     'server/shop_tests.lua',
     'server/treasury_tests.lua',
     'server/bank_tests.lua',
-    'server/transaction_tests.lua'
+    'server/transaction_tests.lua',
+    'server/release_tests.lua'
 }
 
 dependencies {

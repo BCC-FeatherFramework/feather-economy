@@ -199,7 +199,7 @@ end, true)
 
 if not Config.DevMode then return end
 
--- Live movement test. Usage: EconomyBankLiveTest <connected source> <fresh requestId>
+-- Live movement test. Usage: EconomyBankLiveTest <character UUID|server id> <fresh requestId>
 -- Uses $6.00 of the character's own wallet (creates no currency, so it needs no
 -- policy grant): deposits, replays the deposit, rejects an overdraw, withdraws,
 -- charges a $0.50 fee, checks the history, then returns the rest. The bank account
@@ -208,11 +208,10 @@ if not Config.DevMode then return end
 RegisterCommand('EconomyBankLiveTest', function(source, args)
     if source ~= 0 then return end
     local called, failure = xpcall(function()
-        local serverId, requestId = tonumber(args[1]), args[2]
-        assert(serverId and type(requestId) == 'string' and requestId ~= '', 'usage: EconomyBankLiveTest <source> <requestId>')
-        local session = exports['feather-core']:GetSessionContext(serverId)
-        assert(type(session) == 'table' and session.ok and session.value and session.value.characterId, 'character session unavailable')
-        local characterId = session.value.characterId:lower()
+        local characterId, reason = EconomyTests.Character(args[1])
+        local requestId = args[2]
+        assert(characterId and EconomyTests.RequestId(requestId),
+            'usage: EconomyBankLiveTest <character UUID|server id> <requestId> ' .. tostring(reason or ''))
         local wallets = EconomyAPI.EnsureCharacterWallets({ characterId = characterId }, 'feather-economy')
         local banks = EconomyAPI.EnsureCharacterBankAccounts({ characterId = characterId, accountRef = 'live-test-1' }, 'feather-economy')
         local second = EconomyAPI.EnsureCharacterBankAccounts({ characterId = characterId, accountRef = 'live-test-2' }, 'feather-economy')
