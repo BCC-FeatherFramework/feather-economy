@@ -83,6 +83,11 @@ Config = {
             ['bcc-craft'] = true,         -- crafting book purchases into the system sink
             ['bcc-housing'] = true,       -- house purchases, rent and tax
         },
+        -- May settle payable obligations (Config.Settlement): pay an obligation into
+        -- an organization treasury, and out of one for the resource that operates it.
+        trustedSettlers = {
+            ['feather-contracts'] = true,
+        },
         trustedReversers = {
             ['feather-economy'] = true,
             ['feather-shops'] = true,
@@ -107,6 +112,12 @@ Config = {
             ['bank.migration.import'] = true,
             ['bank.reserve.funding'] = true
         },
+    },
+    -- The reason and reference every obligation settlement must carry. Operators
+    -- cannot register this reason for themselves.
+    Settlement = {
+        reasonCode = 'contracts.settlement',
+        referenceType = 'contract_obligation'
     },
     -- Issue and Destroy need an explicit Core policy grant (issueAction or
     -- destroyAction) for the calling resource. Keep enabled for production;

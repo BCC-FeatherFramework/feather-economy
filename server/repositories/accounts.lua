@@ -29,7 +29,9 @@ local function Normalize(row)
         balanceRevision = tonumber(row.balance_revision),
         createdAt = row.created_at,
         closedAt = row.closed_at,
-        updatedAt = row.updated_at
+        updatedAt = row.updated_at,
+        -- The resource an organization treasury is bound to (operated accounts).
+        operatorResource = row.operator_resource
     }
 end
 
@@ -205,9 +207,11 @@ function EconomyAccounts.Get(accountId)
     local row = DB.one([[
         SELECT a.`account_id`,a.`owner_type`,a.`owner_id`,a.`account_type`,a.`account_ref`,a.`currency_code`,
                a.`status`,a.`label`,a.`revision` AS `account_revision`,a.`created_at`,a.`closed_at`,
-               b.`posted_amount`,b.`revision` AS `balance_revision`,b.`updated_at`
+               b.`posted_amount`,b.`revision` AS `balance_revision`,b.`updated_at`,o.`operator_resource`
         FROM `economy_accounts` a
         INNER JOIN `economy_balances` b ON b.`account_id`=a.`account_id`
+        LEFT JOIN `economy_treasury_operators` o
+               ON a.`owner_type`='organization' AND a.`account_type`='treasury' AND o.`organization_id`=a.`owner_id`
         WHERE a.`account_id`=? LIMIT 1
     ]], accountId)
     if not row then
@@ -223,9 +227,11 @@ function EconomyAccounts.FindByOwner(ownerType, ownerId)
     local rows = DB.query([[
         SELECT a.`account_id`,a.`owner_type`,a.`owner_id`,a.`account_type`,a.`account_ref`,a.`currency_code`,
                a.`status`,a.`label`,a.`revision` AS `account_revision`,a.`created_at`,a.`closed_at`,
-               b.`posted_amount`,b.`revision` AS `balance_revision`,b.`updated_at`
+               b.`posted_amount`,b.`revision` AS `balance_revision`,b.`updated_at`,o.`operator_resource`
         FROM `economy_accounts` a
         INNER JOIN `economy_balances` b ON b.`account_id`=a.`account_id`
+        LEFT JOIN `economy_treasury_operators` o
+               ON a.`owner_type`='organization' AND a.`account_type`='treasury' AND o.`organization_id`=a.`owner_id`
         WHERE a.`owner_type`=? AND a.`owner_id`=?
         ORDER BY a.`currency_code`,a.`account_type`,a.`account_ref`
         LIMIT ?

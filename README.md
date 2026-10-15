@@ -212,6 +212,7 @@ decides. Grant each consumer only what it uses:
 | `trustedBankTransactors` | Registering reasons with bank shapes; also needs `trustedTransactors` |
 | `trustedTreasuryOperators` | Binding treasuries and registering treasury shapes; also needs `trustedTransactors` |
 | `privilegedHistoryReaders` | History and transactions of any account |
+| `trustedSettlers` | Settling payable obligations into and out of organization treasuries (see Obligation settlement) |
 | `trustedReversers` | `ReversePayment` |
 | `trustedSuppliers` | `Issue` and `Destroy`, still subject to the Core policy |
 
@@ -284,7 +285,25 @@ organization through `feather-organizations` at call time (no startup
 dependency) and provisions one zero-balance treasury per currency.
 Provisioning grants no spending rights. Without an operator binding, a treasury
 receives only `shop.purchase` transfers with a UUID `shop_order` reference and
-pays out only through payment reversals.
+obligation settlements, and pays out only through payment reversals.
+
+## Obligation settlement
+
+A resource in `trustedSettlers` (a payable-obligations service) may settle an
+obligation with organizations as either party. Every such transfer carries
+`Config.Settlement.reasonCode` (`contracts.settlement`),
+`Config.Settlement.referenceType` (`contract_obligation`) and the obligation's
+UUID as `referenceId`.
+
+| Payer | Payee | Allowed when |
+|---|---|---|
+| Character wallet | Organization treasury | Always (the settler checks the debtor) |
+| Organization treasury | Wallet, system sink or organization treasury | The transfer's `context.onBehalfOf` names the resource the paying treasury is bound to (operated accounts) |
+
+So an organization pays only when the resource that operates its treasury asks
+for it; the settler cannot spend a treasury on its own. Operators cannot
+register the settlement reason. Account reads include `operatorResource` for a
+bound organization treasury. Advertised as capability `organizationSettlement`.
 
 ## Migrations
 
@@ -325,6 +344,7 @@ wallets on first activation), so a mistyped or foreign UUID is refused.
 | `EconomyBankAccountGateSmokeTest` | every line PASS (in-memory test operators; no funds moved) |
 | `EconomyBankContractSmokeTest` | every line PASS (no accounts created) |
 | `EconomyTransactionReadSmokeTest` | every line PASS (read-only) |
+| `EconomySettlementGateSmokeTest` | every line PASS (in-memory accounts; no funds moved) |
 
 `EconomyReleaseGateSmokeTest` checks that the Core policy grants Economy
 itself no supply. The paging checks use the account with the most entries, so

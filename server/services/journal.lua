@@ -27,8 +27,33 @@ end
 -- Operated accounts: a movement under a reason code an operator registered is
 -- checked against that reason's shapes (server/services/operators.lua). Every
 -- other movement follows the v1 rules below.
+
+-- Settlement of a payable obligation (Config.Settlement). A trusted settler may
+-- move the obligation's amount from a character wallet into an organization
+-- treasury, and out of an organization treasury only for the resource that
+-- operates it (context.onBehalfOf), into a wallet, the system sink or another
+-- organization treasury.
+local function SettlementAllowed(from, to, request, resource, context, database)
+    local settlement, settlers = Config.Settlement, Config.Access.trustedSettlers
+    if type(settlement) ~= 'table' or type(settlers) ~= 'table' or settlers[resource or ''] ~= true
+        or request.reasonCode ~= settlement.reasonCode or request.referenceType ~= settlement.referenceType
+        or not IsUuid(request.referenceId) then
+        return false
+    end
+    local toTreasury = to.account_type == 'treasury' and to.owner_type == 'organization'
+    if from.account_type == 'treasury' and from.owner_type == 'organization' then
+        local operator = type(context) == 'table' and context.onBehalfOf or nil
+        return type(operator) == 'string' and EconomyOperators.OperatedBy(from, operator, database)
+            and (to.account_type == 'wallet' or to.account_type == 'system_sink' or toTreasury)
+    end
+    return from.account_type == 'wallet' and toTreasury
+end
+
 function EconomyJournal.AccountTypesAllowed(operation, from, to, request, resource, context, database)
     if EconomyOperators.Allowed(operation, from, to, request, resource, context, database) then
+        return true
+    end
+    if operation == 'transfer' and SettlementAllowed(from, to, request, resource, context, database) then
         return true
     end
     return operation == 'transfer' and from.account_type == 'wallet'
