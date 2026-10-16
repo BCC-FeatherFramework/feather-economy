@@ -51,10 +51,20 @@ contract 7/7, release gate 23/23, foundation 6/6, account contract 7/7, bank
 contract 14/14, transaction read 9/9, journal audit 5/5 (pending=0), and
 ownership check 0 errors.
 
+Added on 2026-10-16, on the development server:
+
+- Obligation settlement with organizations: `EconomySettlementGateSmokeTest`
+  13/13; feather-contracts `ContractsOrganizationTest` 9/9 (a character pays an
+  organization treasury; the treasury pays only for its operator).
+- Cursor paging: `EconomyReleaseGateSmokeTest` 25/25 and
+  `EconomyHistoryPaginationTest` 13/13 (pages stay stable while a new entry is
+  posted between them).
+
 ### Open
 
-- Admin money commands target only connected characters; offline correction
-  and Admin Economy screens are not available yet.
+- Admin Economy screens are not available yet. `/givemoney` and `/takemoney`
+  (feather-admin) work on offline characters by character UUID and record the
+  staff member as the actor.
 - Not implemented: account closure, holds, credit, `GetBalance`,
   `ListTransactions`, account-created/closed events.
 - Economy has no backup tooling. Back up all `economy_*` tables together, in
