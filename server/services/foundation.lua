@@ -86,6 +86,10 @@ local function ValidateConfig()
             end
         end
     end
+    -- A config from before 0.4.0 has no Settlement block: use the standard one.
+    if Config.Settlement == nil then
+        Config.Settlement = { reasonCode = 'contracts.settlement', referenceType = 'contract_obligation' }
+    end
     local settlement = Config.Settlement
     if (access.trustedSettlers ~= nil and type(access.trustedSettlers) ~= 'table')
         or type(settlement) ~= 'table'
