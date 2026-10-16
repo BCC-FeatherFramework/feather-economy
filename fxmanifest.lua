@@ -36,6 +36,7 @@ server_scripts {
     'server/bank_tests.lua',
     'server/transaction_tests.lua',
     'server/settlement_tests.lua',
+    'server/supply_tests.lua',
     'server/release_tests.lua'
 }
 

@@ -178,6 +178,17 @@ caller as `subject.resource`. Only an explicit allow lets it through. A missing
 provider, a denial, an invalid decision or an error raised by the call returns
 `authorization_denied`, with `details.policyCode` naming the cause.
 
+Who may call them, besides passing the policy:
+
+- `trustedSuppliers`: `Issue` and `Destroy` with any reason (Economy, Admin).
+- `Config.IssueReasons`: a resource listed there may only `Issue` into a
+  character wallet, and only with its listed reason codes, for example a stable
+  buying a horse back (`stables.horse_sale`) or a delivery job paying its
+  driver. It cannot `Destroy` or use any other reason. Add a resource's codes
+  when it is ported, and grant it `economy.currency.issue` in the policy.
+- Operators issue into bank accounts or bound treasuries with
+  `Config.OperatorSupply` (see Operated accounts).
+
 ### Account history
 
 `ListAccountEntries({ accountId, limit, before | offset })` returns entries
@@ -356,6 +367,7 @@ wallets on first activation), so a mistyped or foreign UUID is refused.
 | `EconomyBankContractSmokeTest` | every line PASS (no accounts created) |
 | `EconomyTransactionReadSmokeTest` | every line PASS (read-only) |
 | `EconomySettlementGateSmokeTest` | every line PASS (in-memory accounts; no funds moved) |
+| `EconomyIssueReasonGateSmokeTest` | every line PASS (configuration only; nothing posted) |
 
 `EconomyReleaseGateSmokeTest` checks that the Core policy grants Economy
 itself no supply. The paging checks use the account with the most entries, so

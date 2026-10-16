@@ -98,7 +98,21 @@ Config = {
         trustedSuppliers = {
             ['feather-economy'] = true,
             ['feather-admin'] = true,
-            ['bcc-housing'] = true,       -- sale back to the housing agent; furniture sell-back
+        },
+    },
+    -- Reason codes a resource may create currency into a character wallet with
+    -- (Issue), per resource, exact match only: NPC buy-backs, job pay, rewards.
+    -- Such a resource cannot destroy currency or issue with any other reason, and
+    -- each issue still needs a Core policy grant (economy.currency.issue).
+    -- Add a resource's codes when it is ported.
+    IssueReasons = {
+        ['bcc-housing'] = {
+            ['housing.sold_to_agent'] = true,    -- the housing agent buys a house back
+            ['housing.furniture_sold'] = true    -- furniture sold back
+        },
+        ['bcc-stables'] = {
+            ['stables.horse_sale'] = true,       -- the stable buys a horse
+            ['stables.tamed_sale'] = true        -- a trainer buys a tamed horse
         },
     },
     -- Reason codes an operator may create currency with (issue_to_bank and

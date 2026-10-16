@@ -72,6 +72,20 @@ local function ValidateConfig()
         or access.trustedSuppliers['feather-economy'] ~= true then
         return EconomyResults.Err('invalid_config', 'Config.Access is invalid.')
     end
+    if Config.IssueReasons ~= nil and type(Config.IssueReasons) ~= 'table' then
+        return EconomyResults.Err('invalid_config', 'Config.IssueReasons is invalid.')
+    end
+    for resource, reasons in pairs(Config.IssueReasons or {}) do
+        if type(resource) ~= 'string' or type(reasons) ~= 'table' then
+            return EconomyResults.Err('invalid_config', 'Config.IssueReasons is invalid.', { resource = tostring(resource) })
+        end
+        for code, allowed in pairs(reasons) do
+            if type(code) ~= 'string' or not code:match('^[a-z][a-z0-9_]*%.[a-z0-9_.]+$') or allowed ~= true then
+                return EconomyResults.Err('invalid_config', 'Config.IssueReasons lists an invalid reason code.',
+                    { resource = resource, reasonCode = tostring(code) })
+            end
+        end
+    end
     local settlement = Config.Settlement
     if (access.trustedSettlers ~= nil and type(access.trustedSettlers) ~= 'table')
         or type(settlement) ~= 'table'
@@ -189,6 +203,7 @@ function EconomyFoundation.GetCapabilities()
             organizationTreasuries = 1,
             treasurySettlement = 1,
             organizationSettlement = 1,
+            scopedIssue = 1,
             bankAccounts = 1,
             operatedTreasuries = 1,
             accountHistory = 1,

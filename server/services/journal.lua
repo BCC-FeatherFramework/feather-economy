@@ -68,16 +68,28 @@ function EconomyJournal.AccountTypesAllowed(operation, from, to, request, resour
             and to.account_type == 'wallet'
 end
 
+-- Whether `resource` may post `operation` with `reasonCode`. Trusted suppliers
+-- issue and destroy with any reason. A resource listed in Config.IssueReasons
+-- may only issue, and only with its listed reasons (for example a stable buying
+-- a horse back); an operator issues with its registered supply reasons. Issue
+-- and Destroy also need the Core policy decision (EconomyAPI.Supply).
+function EconomyJournal.MayPost(operation, resource, reasonCode)
+    if type(resource) ~= 'string' then return false end
+    local trusted = operation == 'reversal' and Config.Access.trustedReversers
+        or operation == 'transfer' and Config.Access.trustedTransactors
+        or Config.Access.trustedSuppliers
+    if trusted[resource] then return true end
+    if operation ~= 'issue' then return false end
+    local listed = type(Config.IssueReasons) == 'table' and Config.IssueReasons[resource]
+    return (type(listed) == 'table' and listed[reasonCode or ''] == true)
+        or EconomyOperators.SupplyAllowed(resource, reasonCode)
+end
+
 local function Post(operation, request, context)
     request, context = type(request) == 'table' and request or {},
         type(context) == 'table' and context or {}
     local resource = context.resource
-    local trusted = operation == 'reversal' and Config.Access.trustedReversers
-        or operation == 'transfer' and Config.Access.trustedTransactors
-        or Config.Access.trustedSuppliers
-    local operatorSupply = operation == 'issue'
-        and EconomyOperators.SupplyAllowed(resource, request.reasonCode)
-    if type(resource) ~= 'string' or not (trusted[resource] or operatorSupply) then
+    if not EconomyJournal.MayPost(operation, resource, request.reasonCode) then
         return Failure('authorization_denied',
             'Calling resource is not authorized to transfer currency.')
     end
