@@ -57,9 +57,6 @@ ownership check 0 errors.
   and Admin Economy screens are not available yet.
 - Not implemented: account closure, holds, credit, `GetBalance`,
   `ListTransactions`, account-created/closed events.
-- History is offset-paged: entries posted between two page reads shift later
-  pages. Each entry carries `sequence` so a consumer can drop repeats; cursor
-  paging is not implemented.
 - Economy has no backup tooling. Back up all `economy_*` tables together, in
   one consistent snapshot.
 - Clean deployment from a recipe with merged upstream resources has not been
@@ -173,9 +170,13 @@ provider, a denial, an invalid decision or an error raised by the call returns
 
 ### Account history
 
-`ListAccountEntries({ accountId, limit, offset })` returns entries newest first,
-in posting order. `limit` is 1 to `Config.Limits.maximumPageSize` (default:
-the maximum), and `offset` is 0 to 100000. Each entry has `entryId`,
+`ListAccountEntries({ accountId, limit, before | offset })` returns entries
+newest first, in posting order. `limit` is 1 to `Config.Limits.maximumPageSize`
+(default: the maximum). A full page returns `meta.nextBefore`; pass it as
+`before` to read the next page. Cursor pages stay stable while new entries are
+posted; `offset` (0 to 100000) also works but shifts when entries are posted
+between two reads. `before` and `offset` cannot be combined, and a `before`
+that is not an entry of this account returns `invalid_cursor`. Each entry has `entryId`,
 `sequence`, `transactionId`, `operation`, `currency`, signed `amount`,
 `resultingBalance`, `reasonCode`, `referenceType`, `referenceId`,
 `sourceResource`, `counterpartyAccountId` and `postedAt`.
@@ -340,7 +341,7 @@ wallets on first activation), so a mistyped or foreign UUID is refused.
 | `EconomyAccountContractSmokeTest` | `done 7/7 passed (read-only)` |
 | `EconomyJournalAuditSmokeTest` | `done 5/5 passed ... (read-only)` |
 | `EconomyReleaseContractSmokeTest` | `done 7/7 passed (read-only)` |
-| `EconomyReleaseGateSmokeTest` | `done 23/23 passed (read-only)` (19 when no account has two entries yet) |
+| `EconomyReleaseGateSmokeTest` | `done 25/25 passed (read-only)` (21 when no account has two entries yet) |
 | `EconomyBankAccountGateSmokeTest` | every line PASS (in-memory test operators; no funds moved) |
 | `EconomyBankContractSmokeTest` | every line PASS (no accounts created) |
 | `EconomyTransactionReadSmokeTest` | every line PASS (read-only) |
@@ -355,7 +356,7 @@ run it while that account is quiet.
 | Command | Expected |
 |---|---|
 | `EconomyMigrationFaultTest` | `done 8/8 passed` |
-| `EconomyHistoryPaginationTest <character> <fresh id>` | `done 10/10 passed`, wallet back to its balance |
+| `EconomyHistoryPaginationTest <character> <fresh id>` | `done 13/13 passed`, wallet back to its balance |
 | `EconomyRestartTest prepare <character> <fresh id>`, restart the server, `EconomyRestartTest verify <character> <same id>` | `PREPARED ...`, then `done 10/10 passed` |
 | `EconomyWalletProvisionTest <character>` | `PASS ... idempotent=true` |
 | `EconomyTransferContractSmokeTest <character>` | `done 7/7 passed (no funds moved)` |
