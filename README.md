@@ -59,6 +59,9 @@ Added on 2026-10-16, on the development server:
 - Cursor paging: `EconomyReleaseGateSmokeTest` 25/25 and
   `EconomyHistoryPaginationTest` 13/13 (pages stay stable while a new entry is
   posted between them).
+- Scoped issuing (`Config.IssueReasons`): `EconomyIssueReasonGateSmokeTest`
+  8/8; a stable bought a horse back and the housing agent bought a house back,
+  each with only its listed reasons.
 
 ### Open
 
