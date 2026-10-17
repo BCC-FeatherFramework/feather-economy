@@ -13,6 +13,8 @@ Config = {
     --   bcc-banks          bank accounts, statements, branch reserves
     --   bcc-society        business treasuries: deposits, withdrawals, payroll, bills, tax
     --   bcc-stables        horse and tack purchases
+    --   bcc-documents      document and licence fees
+    --   bcc-legendaries    legendary hunt fees
     --   bcc-shops          store purchases
     --   bcc-craft          crafting book purchases
     --   bcc-housing        house purchases, rent, tax; sale back to the agent creates money
@@ -56,6 +58,8 @@ Config = {
             ['bcc-banks'] = true,         -- balances and statements of bank accounts and reserves
             ['bcc-society'] = true,       -- treasury balance; the system sink for fees
             ['bcc-stables'] = true,       -- the system sink that purchases pay into
+            ['bcc-documents'] = true,     -- the system sink that document fees pay into
+            ['bcc-legendaries'] = true,   -- the system sink that hunt fees pay into
             ['bcc-shops'] = true,         -- the system sink that purchases pay into
             ['bcc-craft'] = true,         -- the system sink that book purchases pay into
             ['bcc-housing'] = true,       -- wallet balance before a purchase; the system sink
@@ -68,6 +72,8 @@ Config = {
             ['bcc-banks'] = true,         -- the character's wallet for deposits and withdrawals
             ['bcc-society'] = true,       -- member wallets for deposits, withdrawals and wages
             ['bcc-stables'] = true,       -- the buyer's or seller's wallet
+            ['bcc-documents'] = true,     -- the applicant's wallet
+            ['bcc-legendaries'] = true,   -- the hunter's wallet
             ['bcc-shops'] = true,         -- the buyer's wallet
             ['bcc-craft'] = true,         -- the buyer's wallet
             ['bcc-housing'] = true,       -- the buyer's or tenant's wallet
@@ -79,6 +85,8 @@ Config = {
             ['bcc-banks'] = true,         -- bank.* reasons it registers (RegisterOperatedReasons)
             ['bcc-society'] = true,       -- society.* reasons it registers (RegisterOperatedReasons)
             ['bcc-stables'] = true,       -- horse, tack and taming purchases into the system sink
+            ['bcc-documents'] = true,     -- document and licence fees into the system sink
+            ['bcc-legendaries'] = true,   -- hunt fees into the system sink
             ['bcc-shops'] = true,         -- store purchases into the system sink
             ['bcc-craft'] = true,         -- crafting book purchases into the system sink
             ['bcc-housing'] = true,       -- house purchases, rent and tax
